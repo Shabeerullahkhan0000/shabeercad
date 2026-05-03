@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dwg Database JSON Viewer</title>
+    <style>
+        #fileInfo1:empty, #fileInfo2:empty {
+            height: 10px;
+        }
+      
+        #fileInfo1, #fileInfo2 {
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+        .table {
+            width: 100%;
+            table-layout: fixed;
+        }
+        .table td {
+            vertical-align: top;
+        }
+        .btn {
+            display: inline-block;
+            padding: 8px 12px;
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn.disabled {
+            opacity: 0.5;
+            cursor: default;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Dwg/dxf Database JSON Viewer</h1>
+    <table class="table">
+        <tr>
+            <td>
+                <label for="fileInput" class="btn disabled">Choose Dwg File</label>
+                <input type="file" id="fileInput" accept=".dwg" style="display: none;" disabled />
+                <span id="fileName1">No File Chosen</span>
+                <div id="fileInfo1"></div>
+            </td>
+            <td></td>
+            <td>
+                <label for="fileInput2" class="btn disabled">Choose Dxf File</label>
+                <input type="file" id="fileInput2" accept=".dxf" style="display: none;" disabled />
+                <span id="fileName2">No File Chosen</span>
+                <div id="fileInfo2"></div>
+            </td>
+        </tr>
+        <tr>
+            <td>Database from libredwg-web <span id="libredwgVersion"></span></td>
+            <td>Database in x-viewer parsed by libredwg-web</td>
+            <td>Database in x-viewer parsed by x-viewer/core <span id="coreVersion"></span></td>
+        </tr>
+        <tr>
+            <td><div id="jsonEditor1"></div></td>
+            <td><div id="jsonEditor2"></div></td>
+            <td><div id="jsonEditor3"></div></td>
+        </tr>
+    </table>
+    <br>
+    <div><a href="https://mlightcad.github.io/libredwg-web/1_dwg_json_viewer.html" style="color: #aaa; font-size: 8px;">mlightcad dwg json viewer</a></div>
+    <!-- <script type="module" src="dist/libredwg-web.js" defer></script> -->
+    <script>
+        // Auto-detect environment and load resources accordingly
+        (function() {
+            // Check if running locally (localhost, 127.0.0.1, or file:// protocol)
+            const wl = window.location;
+            const isDevEnv = wl.hostname === "localhost" || wl.hostname === "127.0.0.1";
+
+            // Load jsoneditor based on environment
+            const jsoneditorJsPath = isDevEnv
+                ? "libs/jsoneditor/jsoneditor.min.js"
+                : "https://cdn.jsdelivr.net/npm/jsoneditor@10.2.0/dist/jsoneditor.min.js";
+            
+            const jsoneditorCssPath = isDevEnv
+                ? "libs/jsoneditor/jsoneditor.min.css"
+                : "https://cdn.jsdelivr.net/npm/jsoneditor@10.2.0/dist/jsoneditor.min.css";
+
+            // Load CSS
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = jsoneditorCssPath;
+            document.head.appendChild(link);
+
+            // Load JS
+            const script = document.createElement('script');
+            script.src = jsoneditorJsPath;
+            // Wait for JSONEditor to load before initializing the module code
+            script.onload = () => {
+                // Trigger the module initialization after JSONEditor is loaded
+                if (window.initJsonViewerModule) {
+                    window.initJsonViewerModule();
+                }
+            };
+            document.head.appendChild(script);
+
+            // Set import map for x-viewer/core
+            const resolvePath = (pkgName) =>
+                isDevEnv
+                    ? `../packages/${pkgName}/dist/index.esm.js`
+                    : `https://cdn.jsdelivr.net/npm/@x-viewer/${pkgName}@latest/dist/index.esm.js`;
+
+            const corePath = resolvePath("core");
+
+            const importMap = document.createElement('script');
+            importMap.type = 'importmap';
+            importMap.textContent = JSON.stringify({
+                imports: {
+                    "@x-viewer/core": corePath
+                }
+            });
+            document.head.appendChild(importMap);
+        })();
+    </script>
+    <script type="module">
+        import { DxfParser, VERSION, LIBREDWG_WEB_VERSION } from "@x-viewer/core";
+
+        // Initialize function that will be called after JSONEditor is loaded
+        window.initJsonViewerModule = function() {
+            // Enable file selection buttons after page and resources are fully loaded
+            window.addEventListener("load", () => {
+                document.querySelector('label[for="fileInput"]').classList.remove("disabled");
+                document.querySelector('label[for="fileInput2"]').classList.remove("disabled");
+                document.getElementById("fileInput").disabled = false;
+                document.getElementById("fileInput2").disabled = false;
+            });
+
+            // Display libredwg-web version
+            const libredwgVersionElement = document.getElementById('libredwgVersion');
+            if (libredwgVersionElement && LIBREDWG_WEB_VERSION) {
+                libredwgVersionElement.textContent = `(v${LIBREDWG_WEB_VERSION})`;
+            }
+
+            // Display x-viewer/core version
+            const coreVersionElement = document.getElementById('coreVersion');
+            if (coreVersionElement && VERSION) {
+                coreVersionElement.textContent = `(v${VERSION})`;
+            }
+
+            const printFileInfo1 = (version, codepage, stats) => {
+                const infoElement = document.getElementById('fileInfo1');
+                infoElement.innerHTML = '';
+                infoElement.textContent = `Version: ${version}, Code Page: ${codepage}, Unknown Entities: ${stats.unknownEntityCount}`;
+            }
+
+            // create the editor (now JSONEditor is guaranteed to be loaded)
+            const container1 = document.getElementById('jsonEditor1')
+            const container2 = document.getElementById('jsonEditor2')
+            const container3 = document.getElementById('jsonEditor3')
+            const options = {
+                mode: 'view'
+            }
+            const jsonEditor1 = new JSONEditor(container1, options)
+            const jsonEditor2 = new JSONEditor(container2, options)
+            const jsonEditor3 = new JSONEditor(container3, options)
+
+            // handle file input change event
+            const fileInput = document.getElementById('fileInput')
+            const fileName1Element = document.getElementById('fileName1')
+            fileInput.addEventListener('change', function(event) {
+                const file = event.target.files[0]
+                if (file) {
+                    // Update file name display
+                    fileName1Element.textContent = file.name
+                    
+                    const reader = new FileReader();
+                    reader.onload = async function(e) {
+                        const fileContent = e.target.result;
+                        let version;
+                        let codepage;
+                        let stats = { unknownEntityCount: "" };
+                        const parser = new DxfParser();
+                        {
+                            const result = await parser.libredwgConvertExAsync(fileContent);
+                            jsonEditor1.set(result.database);
+                            version = result.version;
+                            codepage = result.codepage;
+                            stats = result.stats;
+                        }
+
+                        {
+                            // Full x-viewer IDxf conversion (loads libredwg on demand via parseAsync)
+                            const result = await parser.parseAsync(fileContent);
+                            jsonEditor2.set({
+                                tables: result.tables,
+                                objects: result.objects,
+                                header: result.header,
+                                entities: result.entities,
+                                classes: result.classes,
+                                blocks: result.blocks,
+                            });
+                            version = version || result.header["$ACADVER"];
+                            codepage = codepage || result.header["$DWGCODEPAGE"];
+                        }
+                        printFileInfo1(version, codepage, stats);
+                    }
+
+                    jsonEditor1.clear();
+                    jsonEditor2.clear();
+                    // read the file
+                    reader.readAsArrayBuffer(file)
+                } else {
+                    fileName1Element.textContent = 'No File Chosen'
+                    console.log('No file selected')
+                }
+            })
+
+            // handle dxf file input change event
+            const fileInput2 = document.getElementById('fileInput2')
+            const fileName2Element = document.getElementById('fileName2')
+            fileInput2.addEventListener('change', function(event) {
+                const file = event.target.files[0]
+                if (file) {
+                    // Update file name display
+                    fileName2Element.textContent = file.name
+
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const fileContent = e.target.result;
+                        const parser = new DxfParser();
+
+                        // Parse DXF file using dxf-parser
+                        const result = parser.parse(fileContent);
+
+                        // Display in the third column (dxf-parser result)
+                        jsonEditor3.set({
+                            tables: result.tables,
+                            objects: result.objects,
+                            header: result.header,
+                            entities: result.entities,
+                            classes: result.classes,
+                            blocks: result.blocks,
+                        });
+
+                        // Display info
+                        const infoElement = document.getElementById('fileInfo2');
+                        infoElement.innerHTML = '';
+                        const version = result.header["$ACADVER"] || "Unknown";
+                        const codepage = result.header["$DWGCODEPAGE"] || "Unknown";
+                        infoElement.textContent = `Version: ${version}, Code Page: ${codepage}`;
+                    }
+
+                    jsonEditor3.clear();
+                    // read the file
+                    reader.readAsArrayBuffer(file)
+                } else {
+                    fileName2Element.textContent = 'No File Chosen'
+                    console.log('No DXF file selected')
+                }
+            })
+        };
+
+        // If JSONEditor is already loaded (e.g., cached), initialize immediately
+        if (typeof JSONEditor !== 'undefined') {
+            window.initJsonViewerModule();
+        }
+    </script>
+</body>
+</html>

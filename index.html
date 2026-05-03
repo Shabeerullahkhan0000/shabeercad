@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DWG Viewer Dashboard</title>
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" type="text/css" href="./iconfont/iconfont.css" />
+    <link rel="stylesheet" type="text/css" href="./iconfont/iconfont2.css" />
+    <style>
+        @keyframes expandWidth {
+            0% { width: 15%; left: 42.5%; }
+            100% { width: 85%; left: 7.5%; }
+        }
+        @keyframes loadingBar {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        #viewer-container {
+            position: fixed;
+            inset: 0;
+            background: #1e293b;
+            z-index: 100;
+            display: none;
+        }
+        #myCanvas {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        .viewer-toolbar {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 150;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .viewer-toolbar.visible {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(-50%) translateX(0);
+        }
+        .toolbar-btn {
+            width: 48px;
+            height: 48px;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #cbd5e1;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+        .toolbar-btn:hover {
+            background: #2563eb;
+            color: white;
+            transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(37, 99, 235, 0.4);
+        }
+        .toolbar-btn.active {
+            background: #2563eb;
+            color: white;
+        }
+        .toolbar-tooltip {
+            position: absolute;
+            right: 60px;
+            background: #0f172a;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(10px);
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+        .toolbar-btn:hover .toolbar-tooltip {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        /* Custom Loading Overlay */
+        #loading-overlay {
+            transition: opacity 0.4s ease-in-out;
+            background-color: #f8fafc;
+        }
+        @keyframes dimensionExpand {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 10px rgba(37, 99, 235, 0.4); }
+            50% { box-shadow: 0 0 20px rgba(37, 99, 235, 0.7); }
+        }
+        @keyframes moveGradient {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 100% 50%; }
+        }
+        @keyframes floatText {
+            0%, 100% { transform: translateX(-50%) translateY(0px); }
+            50% { transform: translateX(-50%) translateY(-2px); }
+        }
+        @keyframes pulseIndicator {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.9; }
+        }
+        .dimension-line-container {
+            position: absolute;
+            height: 60px;
+            width: 85%;
+            max-width: 620px;
+            left: 50%;
+            top: 55%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            align-items: center;
+        }
+        .fixed-side {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            z-index: 20;
+            gap: 8px;
+        }
+        .expanding-line {
+            position: absolute;
+            left: 30px; /* vertical(2) + gap(8) + arrow(12) + sub_gap(8) */
+            top: 50%;
+            transform: translateY(-50%);
+            height: 2px;
+            background: linear-gradient(90deg, #2563eb, #60a5fa, #2563eb);
+            background-size: 200% 100%;
+            animation: moveGradient 2s linear infinite;
+            width: 0px;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+            border-radius: 4px;
+            box-shadow: 0 0 15px rgba(37, 99, 235, 0.3);
+        }
+        .moving-side {
+            position: absolute;
+            left: 60px;
+            top: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 20;
+            gap: 8px;
+            transform: translateX(-100%);
+        }
+        .extension-vertical {
+            width: 2px;
+            height: 32px;
+            background: #2563eb;
+            box-shadow: 0 0 8px rgba(37, 99, 235, 0.4);
+            border-radius: 2px;
+        }
+        .arrow-head {
+            width: 12px;
+            height: 12px;
+            fill: #2563eb;
+            filter: drop-shadow(0 0 4px rgba(37, 99, 235, 0.4));
+        }
+        .measurement-label-container {
+            position: absolute;
+            left: 0%;
+            top: -42px;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            pointer-events: none;
+            background: #ffffff;
+            padding: 8px 18px;
+            border-radius: 12px;
+            border: 1px solid rgba(37, 99, 235, 0.15);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+            animation: floatText 3s infinite ease-in-out;
+            z-index: 30;
+            transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+        }
+        .loading-status-pill {
+            background: #2563eb;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 99px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+            margin-bottom: 16px;
+            animation: pulseIndicator 2s infinite ease-in-out;
+        }
+        #measure-tooltip {
+            display: none !important;
+        }
+        .track-line {
+            position: absolute;
+            left: 30px;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            height: 1px;
+            background: #e2e8f0;
+            z-index: 5;
+        }
+    </style>
+    <script>
+        // Auto-detect environment and set import map for x-viewer packages
+        (function() {
+            const isDevEnv = false;
+            const resolvePath = (pkgName) =>
+                isDevEnv
+                    ? `../packages/${pkgName}/dist/index.esm.js`
+                    : `https://cdn.jsdelivr.net/npm/@x-viewer/${pkgName}@latest/dist/index.esm.js`;
+
+            const corePath = resolvePath("core");
+            const pluginsPath = resolvePath("plugins");
+            const uiPath = resolvePath("ui");
+
+            const importMap = document.createElement("script");
+            importMap.type = "importmap";
+            importMap.textContent = JSON.stringify({
+                imports: {
+                    "@x-viewer/core": corePath,
+                    "@x-viewer/plugins": pluginsPath,
+                    "@x-viewer/ui": uiPath,
+                },
+            });
+            document.head.appendChild(importMap);
+        })();
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans min-h-screen flex flex-col selection:bg-blue-100 italic-selection:text-blue-900">
+    <!-- Viewer Container (Hidden by default) -->
+    <div id="viewer-container">
+        <div id="viewer-header" class="absolute top-4 inset-x-4 sm:inset-x-6 z-50 flex items-center justify-between pointer-events-none gap-3">
+            <!-- Left: Back Button -->
+            <div class="flex-shrink-0 pointer-events-auto items-center flex">
+                <button onclick="closeViewer()" class="flex items-center justify-center w-10 sm:w-auto h-10 sm:px-4 bg-slate-900/80 hover:bg-slate-800 backdrop-blur-md text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-xl hover:scale-105 sm:hover:scale-100 sm:hover:-translate-x-1 border border-white/10 group">
+                    <i data-lucide="arrow-left" class="w-4 h-4 text-slate-300 group-hover:text-white transition-colors"></i>
+                    <span class="hidden sm:inline sm:ml-2">Back</span>
+                </button>
+            </div>
+
+            <!-- Center: File Name with elegant container -->
+            <div class="flex items-center justify-center gap-2 sm:gap-3 bg-slate-900/80 backdrop-blur-md px-3 sm:px-5 h-10 rounded-xl border border-white/10 flex-1 max-w-[200px] sm:max-w-md pointer-events-auto shadow-xl overflow-hidden transition-all duration-300 hover:bg-slate-800/90 hover:border-white/20">
+                <div class="w-5 h-5 sm:w-6 sm:h-6 bg-blue-500/20 rounded flex items-center justify-center flex-shrink-0 border border-blue-400/30">
+                    <i data-lucide="file-text" class="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-400"></i>
+                </div>
+                <div id="currentFileName" class="text-slate-100 font-bold text-xs sm:text-sm truncate pb-[1px]" title="No file loaded">No file loaded</div>
+            </div>
+            
+            <!-- Right: Upload Button -->
+            <div class="flex-shrink-0 pointer-events-auto items-center flex">
+                <button onclick="triggerUpload()" class="flex items-center justify-center w-10 sm:w-auto h-10 sm:px-5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-xl hover:scale-105 sm:hover:scale-100 sm:hover:-translate-y-1 focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-slate-900 border border-white/10 group">
+                    <i data-lucide="upload" class="w-4 h-4 group-hover:-translate-y-0.5 transition-transform"></i>
+                    <span class="hidden sm:inline sm:ml-2">Upload</span>
+                </button>
+            </div>
+        </div>
+        <div id="myCanvas"></div>
+        
+        <!-- Draggable Measurement HUD -->
+        <div id="drag-hud" style="display: none;"></div>
+
+        <!-- Global HUD Layer (Inside Viewer for Fullscreen Support) -->
+        <div id="hud-layer" class="absolute inset-0 pointer-events-none z-[100] transition-opacity duration-500 overflow-hidden">
+            <!-- Beautiful Persistent Master HUD (Simplified) -->
+            <div id="measurement-toast" class="absolute top-[68px] sm:top-20 left-1/2 transform -translate-x-1/2 transition-all duration-700 opacity-0 translate-y-[-20px] pointer-events-auto">
+                <div class="bg-slate-900/95 border border-blue-500/40 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] px-3 py-1 flex flex-row items-center gap-1.5 backdrop-blur-2xl relative border-b-2 border-b-blue-600 group/hud mx-auto w-max max-w-[90vw]">
+                    <div class="flex items-center gap-1.5 pt-0.5">
+                        <div id="toast-indicator" class="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                        <div id="toast-status-label" class="text-blue-400 text-[8px] font-black uppercase tracking-tight whitespace-nowrap opacity-80">Last Distance</div>
+                    </div>
+                    <div class="text-white text-xl sm:text-2xl font-bold flex items-baseline font-mono tracking-tighter">
+                        <span id="toast-distance-value">0.00</span>
+                    </div>
+                    <!-- HUD Close Button (Always visible) -->
+                    <button onclick="hideHUDManual()" class="ml-0.5 p-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all active:scale-90" title="Hide HUD">
+                        <i data-lucide="x" class="w-3 h-3"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Floating Toolbar -->
+        <div id="viewer-toolbar" class="viewer-toolbar">
+            <button class="toolbar-btn" onclick="viewerAction('zoomExtents')" title="Fit Screen">
+                <i data-lucide="maximize"></i>
+                <span class="toolbar-tooltip">Fit Screen</span>
+            </button>
+            <div class="w-8 h-px bg-white/10 mx-auto"></div>
+            <button class="toolbar-btn" id="btn-distance" onclick="viewerAction('distance')" title="Measure Distance">
+                <i data-lucide="ruler"></i>
+                <span class="toolbar-tooltip">Distance</span>
+            </button>
+            <div class="w-8 h-px bg-white/10 mx-auto"></div>
+            <button class="toolbar-btn" id="fullscreen-btn" onclick="viewerAction('fullscreen')" title="Fullscreen">
+                <i data-lucide="expand"></i>
+                <span class="toolbar-tooltip">Fullscreen</span>
+            </button>
+        </div>
+        <div id="image-display-container" class="absolute inset-0 bg-slate-900 hidden items-center justify-center z-10">
+            <img id="image-display" class="max-w-full max-h-full object-contain" src="" alt="">
+        </div>
+
+        <!-- Custom Loading Overlay -->
+        <div id="loading-overlay" class="absolute inset-0 z-40 bg-slate-50 flex flex-col items-center justify-center opacity-0 pointer-events-none">
+            <div id="loading-card" class="flex flex-col items-center w-full max-w-2xl px-4 transform scale-90 transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)]">
+                
+                <!-- New Informational Header -->
+                <div class="flex flex-col items-center mb-8">
+                    <div id="loading-status-pill" class="loading-status-pill">Processing</div>
+                    <div class="flex items-center gap-3 px-6 py-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                        <div class="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center border border-blue-100">
+                             <i data-lucide="file-digit" class="w-5 h-5 text-blue-600"></i>
+                        </div>
+                        <div class="flex flex-col">
+                            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Loading File</span>
+                            <span id="loading-file-name" class="text-sm font-bold text-slate-800 truncate max-w-[200px] sm:max-w-[300px]">Initializing...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="relative w-full h-40 flex items-center justify-center overflow-hidden">
+                    <!-- Animated Dimension Line (Enhanced Technical Style) -->
+                        <div class="dimension-line-container">
+                        <!-- Technical Track Line -->
+                        <div class="track-line"></div>
+
+                        <!-- Fixed Left Side -->
+                        <div class="fixed-side">
+                            <div class="extension-vertical"></div>
+                            <svg class="arrow-head -rotate-90" viewBox="0 0 10 10">
+                                <path d="M5 0 L10 10 L0 10 Z"/>
+                            </svg>
+                        </div>
+
+                        <!-- Expanding Horizontal Line -->
+                        <div id="loading-line-progress" class="expanding-line"></div>
+
+                        <!-- Moving Right Side (Offset by width of line) -->
+                        <div id="loading-moving-side" class="moving-side">
+                            <svg class="arrow-head rotate-90" viewBox="0 0 10 10">
+                                <path d="M5 0 L10 10 L0 10 Z"/>
+                            </svg>
+                            <div class="extension-vertical"></div>
+                        </div>
+
+                        <!-- Measurement Label (Centered between arrows) -->
+                        <div id="measurement-box" class="measurement-label-container opacity-0">
+                             <div class="flex items-center gap-1">
+                                <span id="loading-measurement" class="text-2xl sm:text-3xl font-mono font-black text-slate-900 tracking-tighter">1.05</span>
+                                <span class="text-blue-600 font-black text-xs uppercase">m</span>
+                             </div>
+                        </div>
+                     </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    <!-- Background Decor -->
+    <div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+        <div class="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] rounded-full bg-blue-50/50 blur-[120px]"></div>
+        <div class="absolute top-[20%] -right-[10%] w-[30%] h-[30%] rounded-full bg-indigo-50/50 blur-[100px]"></div>
+        <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.03]"></div>
+    </div>
+
+    <input type="file" id="hero-file-input" class="absolute pointer-events-none opacity-0 w-1 h-1" accept=".dwg,.dxf,.pdf,.png,.jpg,.jpeg,.bmp,.gif,application/pdf,application/acad,image/vnd.dwg,image/vnd.dxf,image/png,image/jpeg,image/gif">
+    <!-- Fixed Logo -->
+    <div id="logo-wrapper" class="fixed top-0 left-0 z-50 flex flex-col items-start pointer-events-none transition-all duration-300 ease-in-out">
+        <img id="main-logo" src="images/final-3-removed-bg.png" alt="ShabeerCAD" class="h-32 w-40 sm:h-48 sm:w-64 object-contain pointer-events-auto transition-all duration-300 ease-in-out p-1 sm:p-2 sm:pl-3 sm:pt-3">
+    </div>
+
+    <!-- Top Right Action -->
+    <div class="fixed top-4 right-4 sm:top-6 sm:right-6 z-50 flex items-center pointer-events-none">
+        <button onclick="triggerUpload()" class="pointer-events-auto flex items-center justify-center w-12 h-12 sm:w-auto sm:h-12 sm:px-6 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase tracking-widest rounded-2xl transition-all shadow-2xl hover:scale-105 active:scale-95 border border-white/20 backdrop-blur-md group">
+            <i data-lucide="upload" class="w-5 h-5 group-hover:-translate-y-0.5 transition-transform"></i>
+            <span class="hidden sm:inline sm:ml-2">Upload File</span>
+        </button>
+    </div>
+
+    <script>
+        // Make the logo shrink on scroll to prevent overlapping significantly
+        let isShrunk = false;
+        let scrollTicking = false;
+
+        window.addEventListener('scroll', () => {
+            if (!scrollTicking) {
+                window.requestAnimationFrame(() => {
+                    const logo = document.getElementById('main-logo');
+                    const wrapper = document.getElementById('logo-wrapper');
+                    
+                    if (window.scrollY > 50 && !isShrunk) {
+                        isShrunk = true;
+                        // Shrink when scrolled
+                        logo.classList.remove('h-32', 'sm:h-48', 'w-40', 'sm:w-64', 'sm:pl-3', 'sm:pt-3');
+                        logo.classList.add('h-14', 'w-14', 'sm:h-16', 'sm:w-16');
+                        
+                        // Add blur and background to wrapper, transform to round circle
+                        wrapper.classList.add('backdrop-blur-xl', 'bg-white/90', 'rounded-full', 'p-2', 'shadow-lg', 'pointer-events-auto', 'translate-x-3', 'translate-y-3');
+                    } else if (window.scrollY <= 50 && isShrunk) {
+                        isShrunk = false;
+                        // Return to original huge size
+                        logo.classList.add('h-32', 'sm:h-48', 'w-40', 'sm:w-64', 'sm:pl-3', 'sm:pt-3');
+                        logo.classList.remove('h-14', 'w-14', 'sm:h-16', 'sm:w-16');
+                        
+                        // Remove blur and background from wrapper
+                        wrapper.classList.remove('backdrop-blur-xl', 'bg-white/90', 'rounded-full', 'p-2', 'shadow-lg', 'pointer-events-auto', 'translate-x-3', 'translate-y-3');
+                    }
+                    scrollTicking = false;
+                });
+                scrollTicking = true;
+            }
+        });
+    </script>
+
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 sm:py-32 w-full pt-32 sm:pt-40">
+        
+        <!-- Hero / Upload Section -->
+        <section class="mb-32 text-center flex flex-col items-center">
+                            
+            <div class="max-w-4xl mb-16 px-4">
+                <h2 class="text-[2.75rem] sm:text-9xl font-[1000] text-slate-900 mb-8 tracking-[-0.05em] leading-[0.9] text-center mt-12">
+                    Open any <span class="text-blue-600">Drawing.</span><br/>
+                    <span class="text-slate-400/50 block mt-2 sm:mt-4 text-3xl sm:text-7xl tracking-[-0.03em]">No software. No problem.</span>
+                </h2>
+                <p class="hidden sm:block text-xl text-slate-500 font-medium leading-relaxed max-w-xl mx-auto mb-10">
+                    The professional standard for web-based CAD viewing. <br/>Fast, private, and zero installation required.
+                </p>
+                <div class="flex items-center justify-center gap-6 sm:gap-12 mt-4 sm:mt-12">
+                    <div class="flex flex-col items-center">
+                        <span class="text-xl sm:text-3xl font-black text-slate-900 tracking-tighter">100%</span>
+                        <span class="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Private</span>
+                    </div>
+                    <div class="h-6 sm:h-10 w-px bg-slate-200"></div>
+                    <div class="flex flex-col items-center">
+                        <span class="text-xl sm:text-3xl font-black text-slate-900 tracking-tighter">Fast</span>
+                        <span class="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Engine</span>
+                    </div>
+                    <div class="h-6 sm:h-10 w-px bg-slate-200"></div>
+                    <div class="flex flex-col items-center">
+                        <span class="text-xl sm:text-3xl font-black text-slate-900 tracking-tighter">Zero</span>
+                        <span class="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Setup</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="w-full max-w-2xl relative px-4 group">
+                <div class="absolute -inset-10 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 rounded-[3rem] blur-[60px] opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
+                
+                <div id="drop-zone" onclick="triggerUpload()" class="relative block p-12 sm:p-24 border border-slate-200 rounded-[3rem] bg-white group shadow-[0_30px_100px_rgba(0,0,0,0.04)] hover:shadow-[0_45px_120px_rgba(0,0,0,0.08)] transition-all duration-500 cursor-pointer overflow-hidden border-b-4 hover:border-blue-500">
+                    <!-- Background Design Element -->
+                    <div class="absolute top-0 left-0 w-full h-full opacity-[0.03] pointer-events-none bg-[radial-gradient(circle_at_20%_20%,#3b82f6_0%,transparent_30%)] group-hover:opacity-[0.06] transition-opacity"></div>
+                    
+                    <div class="absolute top-0 right-0 p-10 opacity-5 group-hover:opacity-10 transition-opacity">
+                        <i data-lucide="file-digit" class="w-40 h-40 text-blue-600 rotate-6"></i>
+                    </div>
+                    
+                    <div class="w-24 h-24 bg-slate-900 rounded-3xl flex items-center justify-center mx-auto mb-10 shadow-2xl shadow-slate-200 group-hover:scale-110 group-hover:bg-blue-600 group-hover:rotate-6 transition-all duration-500">
+                        <i data-lucide="plus" class="w-12 h-12 text-white"></i>
+                    </div>
+
+                    <span class="block text-3xl sm:text-4xl font-black text-slate-900 mb-4 tracking-tighter">
+                        <span class="hidden sm:inline">Drop Drawing to Open</span>
+                        <span class="inline sm:hidden">Select a Drawing</span>
+                    </span>
+                    
+                    <p class="text-slate-400 text-lg font-bold mb-12">
+                        <span class="hidden sm:inline">or</span> tap here to browse CAD files
+                    </p>
+
+                    <div class="inline-flex items-center gap-3 px-6 py-3 bg-slate-900 rounded-full group-hover:bg-blue-600 transition-colors shadow-lg shadow-slate-200 group-hover:shadow-blue-200">
+                        <i data-lucide="eye" class="w-4 h-4 text-white"></i>
+                        <span class="text-xs font-black text-white uppercase tracking-[0.2em]">Open viewer</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tabs Navigation -->
+        <div class="flex items-center gap-8 border-b border-slate-200 mb-8 overflow-x-auto no-scrollbar">
+            <button onclick="switchTab('samples')" id="tab-samples" class="pb-4 px-2 text-sm font-bold border-b-2 border-blue-600 text-blue-600 whitespace-nowrap transition-all">
+                Sample Drawings
+            </button>
+            <button onclick="switchTab('recent')" id="tab-recent" class="pb-4 px-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 whitespace-nowrap transition-all">
+                Recent
+            </button>
+        </div>
+
+        <!-- Sample Drawings Grid -->
+        <section id="section-samples" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Cards will be populated by JS -->
+        </section>
+
+        <!-- Recent Drawings Grid -->
+        <section id="section-recent" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 text-center py-20">
+            <div id="empty-recent" class="col-span-full">
+                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="history" class="w-8 h-8 text-slate-400"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-slate-700">No recent drawings</h3>
+                <p class="text-slate-500">Drawings you view will appear here.</p>
+            </div>
+            <div id="recent-grid" class="contents"></div>
+        </section>
+    </main>
+    
+    <script type="module">
+        import { Viewer2d, ViewerEvent } from "@x-viewer/core";
+        import {
+            LocalDxfUploader,
+            MeasurementPlugin,
+            Viewer2dToolbarPlugin,
+            ToolbarMenuId,
+            MeasurementType
+        } from "@x-viewer/plugins";
+        // Import our extension
+        import "./draggable-measurement-extension.js";
+
+        let viewer = null;
+        let modelUploader = null;
+        let viewerPromise = null;
+        const language = "en";
+        
+        window.MeasurementType = MeasurementType;
+        window.ToolbarMenuId = ToolbarMenuId;
+        window.ViewerEvent = ViewerEvent;
+
+        async function initViewer() {
+            if (viewer) return viewer;
+            if (viewerPromise) return viewerPromise;
+
+            viewerPromise = (async () => {
+                const viewerCfg = {
+                    containerId: "myCanvas",
+                    language,
+                    enableSpinner: false,
+                    enableProgressBar: false,
+                    enableLayoutBar: false,
+                    enableLocalCache: false,
+                };
+
+                viewer = new Viewer2d(viewerCfg);
+                const fontFiles = ["libs/fonts/simplex.shx", "libs/fonts/hztxt.shx", "libs/fonts/arial.ttf", "libs/fonts/Microsoft_YaHei.ttf"];
+                await viewer.setFont(fontFiles);
+
+                let toastTimeout;
+                window.measurementPlugin = new MeasurementPlugin(viewer, { language });
+                
+                // Initialize Professional Draggable Measurement Extension
+                if (window.DraggableMeasurementExtension) {
+                    if (window.draggableExtension && typeof window.draggableExtension.destroy === 'function') {
+                        window.draggableExtension.destroy();
+                    }
+                    window.draggableExtension = new DraggableMeasurementExtension(viewer, window.measurementPlugin);
+                }
+                
+                // Custom elegant HUD updating logic
+                window._hudManuallyClosed = false;
+
+                window.hideHUDManual = function() {
+                    window._hudManuallyClosed = true;
+                    if (window.hideHUD) window.hideHUD();
+                };
+
+                window.hideHUD = function() {
+                    const toast = document.getElementById("measurement-toast");
+                    if (toast) {
+                        toast.classList.remove("opacity-100", "translate-y-0");
+                        toast.classList.add("opacity-0", "translate-y-[-20px]");
+                    }
+                };
+
+                const showHUD = (text, type = 'active') => {
+                    const toast = document.getElementById("measurement-toast");
+                    const valueEl = document.getElementById("toast-distance-value");
+                    const labelEl = document.getElementById("toast-status-label");
+                    const indicatorEl = document.getElementById("toast-indicator");
+                    const overlay = document.getElementById("loading-overlay");
+                    const container = document.getElementById("viewer-container");
+                    
+                    // Prevent HUD during loading, if manually closed, or if viewer is hidden
+                    if (window._hudManuallyClosed) return;
+                    if (container && container.style.display === 'none') return;
+                    if (overlay && overlay.classList.contains("opacity-100")) return;
+                    if (!text && type !== 'ready') return;
+                    
+                    // Update text
+                    if (text && valueEl) valueEl.textContent = text;
+                    
+                    // Update state styling
+                    if (indicatorEl) {
+                        indicatorEl.className = "w-1.5 h-1.5 rounded-full transition-all duration-300";
+                        switch(type) {
+                            case 'live':
+                                if (labelEl) {
+                                    labelEl.textContent = "Last Distance";
+                                    labelEl.className = "text-blue-400 text-[8px] font-black uppercase tracking-[0.1em]";
+                                }
+                                indicatorEl.classList.add("bg-blue-500", "animate-pulse", "shadow-[0_0_8px_#3b82f6]");
+                                break;
+                            case 'complete':
+                                if (labelEl) {
+                                    labelEl.textContent = "Last Distance";
+                                    labelEl.className = "text-emerald-400 text-[8px] font-black uppercase tracking-[0.1em]";
+                                }
+                                indicatorEl.classList.add("bg-emerald-500", "shadow-[0_0_8px_#10b981]");
+                                break;
+                            case 'ready':
+                                if (labelEl) labelEl.className = "text-amber-400 text-[8px] font-black uppercase tracking-[0.1em]";
+                                indicatorEl.classList.add("bg-amber-500", "animate-ping");
+                                break;
+                        }
+                    }
+                    
+                    // Show toast
+                    if (toast) {
+                        toast.classList.remove("opacity-0", "translate-y-[-20px]");
+                        toast.classList.add("opacity-100", "translate-y-0");
+                    }
+                };
+
+                const setupMeasurementListeners = () => {
+                    if (window.measurementPlugin && window.measurementPlugin.measurements && window.MeasurementType) {
+                        const distMeasure = window.measurementPlugin.measurements[window.MeasurementType.Distance];
+                        if (distMeasure && !distMeasure._listenersAttached) {
+                            distMeasure._listenersAttached = true;
+                            
+                            // Start point selected
+                            distMeasure.addEventListener('firstpointpicked', () => {
+                                window._hudManuallyClosed = false; 
+                                showHUD("0.00", 'live');
+                            });
+                            
+                            // Live update during dragging
+                            distMeasure.addEventListener('update', () => {
+                                let text = "";
+                                if (distMeasure.currentMeasureDrawable && isFinite(distMeasure.currentMeasureDrawable.distance)) {
+                                    text = distMeasure.currentMeasureDrawable.distance.toFixed(2);
+                                } else if (distMeasure.drawingPoints && distMeasure.drawingPoints.length >= 2) {
+                                    const pts = distMeasure.drawingPoints;
+                                    const p1 = pts[0];
+                                    const p2 = pts[pts.length - 1]; 
+                                    if (p1 && p2 && isFinite(p1.x) && isFinite(p2.x)) {
+                                        const dx = p1.x - p2.x;
+                                        const dy = p1.y - p2.y;
+                                        text = Math.sqrt(dx*dx + dy*dy).toFixed(2);
+                                    }
+                                }
+                                if (text) showHUD(text, 'live');
+                            });
+                            
+                            // Measurement finished
+                            distMeasure.addEventListener('complete', (event) => {
+                                const drawable = event.currentMeasureDrawable || event.data || event;
+                                if (drawable && isFinite(drawable.distance)) {
+                                    showHUD(drawable.distance.toFixed(2), 'complete');
+                                }
+                            });
+
+                            // Initial state if already activated
+                            if (distMeasure.actived) showHUD(null, 'ready');
+                        }
+                    }
+                };
+
+                // Setup listeners after a small delay to ensure plugin initialization
+                setTimeout(setupMeasurementListeners, 1500);
+
+                // Viewer event as fallback/completion sync
+                viewer.addEventListener(ViewerEvent.MeasurementAdd, (event) => {
+                    const data = event.data || event;
+                    if (data && isFinite(data.distance)) {
+                        showHUD(data.distance.toFixed(2), 'complete');
+                    }
+                });
+                
+                modelUploader = new LocalDxfUploader(viewer);
+                modelUploader.setPdfWorker("libs/pdf/pdf.worker.min.js");
+                
+                modelUploader.onSuccess = (event) => {
+                    if (event && event.fileName) {
+                        document.getElementById("currentFileName").textContent = event.fileName;
+                    }
+                };
+
+                return viewer;
+            })();
+
+            return viewerPromise;
+        }
+
+        window.openViewerWithFile = async (file) => {
+            if (!file) return;
+            
+            const btnDistance = document.getElementById("btn-distance");
+            if (btnDistance) btnDistance.classList.remove("active");
+            
+            window._hudManuallyClosed = false; 
+            if (window.hideHUD) window.hideHUD(); // Hide HUD explicitly during loading
+            
+            const container = document.getElementById("viewer-container");
+            const overlay = document.getElementById("loading-overlay");
+            const loadingCard = document.getElementById("loading-card");
+            const fileNameDisplay = document.getElementById("currentFileName");
+            const imgContainer = document.getElementById("image-display-container");
+            const imgDisplay = document.getElementById("image-display");
+            
+            // Re-create canvas to ensure it's empty
+            const oldCanvas = document.getElementById("myCanvas");
+            if (oldCanvas) {
+                const parent = oldCanvas.parentNode;
+                const newCanvas = document.createElement("div");
+                newCanvas.id = "myCanvas";
+                newCanvas.style.width = "100%";
+                newCanvas.style.height = "100%";
+                newCanvas.style.overflow = "hidden";
+                newCanvas.style.visibility = "hidden";
+                newCanvas.style.opacity = "0";
+                parent.replaceChild(newCanvas, oldCanvas);
+            }
+            const canvasContainer = document.getElementById("myCanvas");
+
+            if (viewer) {
+                try {
+                    if (typeof viewer.dispose === 'function') viewer.dispose();
+                    else if (typeof viewer.destroy === 'function') viewer.destroy();
+                    else if (typeof viewer.uninitialize === 'function') viewer.uninitialize();
+                } catch(e) {}
+                viewer = null;
+                viewerPromise = null;
+            }
+            
+            imgDisplay.src = "";
+            
+            container.style.display = "block";
+            document.body.style.overflow = "hidden";
+            lucide.createIcons();
+            
+            // Show custom loading overlay
+            overlay.classList.remove("opacity-0", "pointer-events-none");
+            overlay.classList.add("opacity-100", "pointer-events-auto");
+            loadingCard.classList.remove("scale-90");
+            loadingCard.classList.add("scale-100");
+            
+            const measurementEl = document.getElementById("loading-measurement");
+            const loadingLine = document.getElementById("loading-line-progress");
+            const movingSide = document.getElementById("loading-moving-side");
+            const measurementBox = document.getElementById("measurement-box");
+            const loadingFileName = document.getElementById("loading-file-name");
+            const loadingStatusPill = document.getElementById("loading-status-pill");
+            const toolbar = document.getElementById("viewer-toolbar");
+
+            if (toolbar) toolbar.classList.remove("visible");
+
+            if (loadingFileName) loadingFileName.textContent = file.name;
+            if (loadingStatusPill) loadingStatusPill.textContent = "Processing";
+
+            // Instant reset before showing
+            if (loadingLine) {
+                loadingLine.style.transition = 'none';
+                loadingLine.style.width = '0px';
+            }
+            if (movingSide) {
+                movingSide.style.transition = 'none';
+                movingSide.style.left = '80px';
+            }
+            if (measurementBox) {
+                measurementBox.style.transition = 'none';
+                measurementBox.style.left = '40px';
+                measurementBox.classList.add("opacity-0");
+            }
+
+            // Show custom loading overlay
+            overlay.classList.remove("opacity-0", "pointer-events-none");
+            overlay.classList.add("opacity-100", "pointer-events-auto");
+            loadingCard.classList.remove("scale-90");
+            loadingCard.classList.add("scale-100");
+            
+            // Re-enable transitions for animation
+            setTimeout(() => {
+                if (loadingLine) loadingLine.style.transition = 'width 0.1s linear';
+                if (movingSide) movingSide.style.transition = 'left 0.1s linear';
+                if (measurementBox) {
+                    measurementBox.style.transition = 'left 0.1s linear, opacity 0.3s ease';
+                    measurementBox.classList.remove("opacity-0");
+                }
+            }, 10);
+
+            let progress = 1.05;
+            let isTaskDone = false;
+            
+            const updateUI = (p) => {
+                if (measurementEl) measurementEl.textContent = p.toFixed(2);
+                
+                const container = document.querySelector('.dimension-line-container');
+                if (!container) return;
+                
+                const containerWidth = container.offsetWidth;
+                const pPx = (p / 100) * containerWidth;
+                
+                // Visual constraints to prevent overlap at low progress
+                // Fixed side ends at 22px. Moving side is 22px wide.
+                // We want a clear gap at the start.
+                const minPx = 70; 
+                const visualPx = Math.max(minPx, Math.min(containerWidth, pPx));
+                
+                if (loadingLine) {
+                    // Symmetric math for the expanding line
+                    // Starts at 30px (22px side + 8px gap)
+                    // Ends at visualPx - 30px (8px gap + 22px side)
+                    const widthPx = Math.max(0, visualPx - 60);
+                    loadingLine.style.width = widthPx + "px";
+                }
+                if (movingSide) {
+                    movingSide.style.left = visualPx + "px";
+                }
+                if (measurementBox) {
+                    // Center measurements between the two vertical boundary lines
+                    measurementBox.style.left = (visualPx / 2) + "px";
+                }
+            };
+
+            if (window.__loadingInterval) {
+                clearInterval(window.__loadingInterval);
+                window.__loadingInterval = null;
+            }
+
+            const progressInterval = setInterval(() => {
+                if (!isTaskDone) {
+                    // Faster at the start, then slows down to a crawl
+                    if (progress < 94) {
+                        const rate = progress < 30 ? 1.2 : 0.3;
+                        progress += Math.random() * rate + 0.1;
+                    }
+                } else {
+                    // Fast smooth surge to 100%
+                    progress += (100 - progress) * 0.2 + 0.4;
+                    if (progress >= 99.9) {
+                        progress = 100;
+                        clearInterval(progressInterval);
+                        window.__loadingInterval = null;
+                        if (loadingStatusPill) loadingStatusPill.textContent = "Complete";
+                        if (toolbar) {
+                            setTimeout(() => {
+                                toolbar.classList.add("visible");
+                                lucide.createIcons();
+                            }, 600);
+                        }
+                        
+                        // Final hide
+                        setTimeout(() => {
+                            overlay.classList.remove("opacity-100", "pointer-events-auto");
+                            overlay.classList.add("opacity-0", "pointer-events-none");
+                            loadingCard.classList.remove("scale-100");
+                            loadingCard.classList.add("scale-90");
+                        }, 500);
+                    }
+                }
+                updateUI(progress);
+            }, 50);
+            window.__loadingInterval = progressInterval;
+
+            fileNameDisplay.textContent = "Initializing...";
+            
+            const isImage = file.type.startsWith('image/') || /\.(png|jpg|jpeg|gif|bmp)$/i.test(file.name);
+
+            try {
+                if (isImage) {
+                    if (loadingStatusPill) loadingStatusPill.textContent = "Loading Image";
+                    fileNameDisplay.textContent = "Loading image " + file.name + "...";
+                    const srcUrl = URL.createObjectURL(file);
+                    imgDisplay.src = srcUrl;
+                    imgContainer.classList.remove("hidden");
+                    imgContainer.classList.add("flex");
+                    canvasContainer.style.visibility = "hidden";
+                    canvasContainer.style.opacity = "0";
+                    fileNameDisplay.textContent = file.name;
+                    fileNameDisplay.title = file.name;
+                } else {
+                    if (loadingStatusPill) loadingStatusPill.textContent = "Analyzing Drawing";
+                    imgContainer.classList.add("hidden");
+                    imgContainer.classList.remove("flex");
+                    canvasContainer.style.visibility = "hidden";
+                    
+                    // Ensure viewer is ready
+                    const v = await initViewer();
+                    if (loadingStatusPill) loadingStatusPill.textContent = "Rendering";
+                    fileNameDisplay.textContent = "Loading " + file.name + "...";
+                    
+                    const srcUrl = URL.createObjectURL(file);
+                    try {
+                        // loadModel replaces the current model
+                        await v.loadModel({ src: srcUrl, fileName: file.name });
+                        canvasContainer.style.visibility = "visible";
+                        canvasContainer.style.opacity = "1";
+                        fileNameDisplay.textContent = file.name;
+                        fileNameDisplay.title = file.name;
+                        
+                        // Activate Measurement Tool By Default
+                        if (window.measurementPlugin) {
+                            setTimeout(() => {
+                                try {
+                                    // Robust type detection
+                                    let type = 1;
+                                    if (window.MeasurementType) {
+                                        type = window.MeasurementType.Distance || window.MeasurementType.DISTANCE || 1;
+                                    }
+                                    
+                                    window.measurementPlugin.activate(type);
+                                    
+                                    // Update UI
+                                    const distanceBtn = document.getElementById("btn-distance");
+                                    if (distanceBtn) distanceBtn.classList.add("active");
+                                    
+                                    console.log("Default measurement tool activated:", type);
+                                } catch(err) {
+                                    console.warn("Default measurement activation deferred:", err);
+                                }
+                            }, 800);
+                        }
+                    } catch (err) {
+                        console.error("Error loading model:", err);
+                        alert("Unable to open this CAD file. Please ensure it is a valid DWG, DXF, or PDF.");
+                        fileNameDisplay.textContent = "Error: " + file.name;
+                    } finally {
+                        // We keep the URL around for the viewer, or it might need it during render. 
+                        // Actually, once loadModel is called, it's usually fine to revoke if it reads it immediately.
+                        // But for safety with some viewers, we revoke in close.
+                    }
+                }
+            } catch (initErr) {
+                console.error("Request failed:", initErr);
+                alert("Failed to display the selected file.");
+            } finally {
+                isTaskDone = true;
+            }
+        };
+
+        window.closeViewer = () => {
+            const container = document.getElementById("viewer-container");
+            const imgContainer = document.getElementById("image-display-container");
+            const canvasContainer = document.getElementById("myCanvas");
+            const toolbar = document.getElementById("viewer-toolbar");
+            const hud = document.getElementById("measurement-toast");
+            
+            const btnDistance = document.getElementById("btn-distance");
+            if (btnDistance) btnDistance.classList.remove("active");
+
+            container.style.display = "none";
+            document.body.style.overflow = "";
+            if (toolbar) toolbar.classList.remove("visible");
+            if (hud) {
+                hud.classList.remove("opacity-100", "translate-y-0");
+                hud.classList.add("opacity-0", "translate-y-[-20px]");
+            }
+            
+            // Reset image display
+            imgContainer.classList.add("hidden");
+            imgContainer.classList.remove("flex");
+            canvasContainer.style.visibility = "visible";
+            canvasContainer.style.opacity = "1";
+            
+            // We don't destroy the viewer here anymore so it stays ready for the next file
+            if (viewer) {
+                try {
+                    if (typeof viewer.clear === 'function') viewer.clear();
+                    if (typeof viewer.clearModel === 'function') viewer.clearModel();
+                } catch(e) {}
+            }
+        };
+
+        // File Input setup
+        const fileInput = document.getElementById('hero-file-input');
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) window.openViewerWithFile(file);
+                // Clear the input so selecting the same file again triggers change
+                e.target.value = '';
+            });
+        }
+
+        window.triggerUpload = () => {
+            if (fileInput) fileInput.click();
+        };
+
+        window.viewerAction = async (action) => {
+            if (!viewer) return;
+
+            switch (action) {
+                case 'zoomExtents':
+                    try {
+                        if (typeof viewer.getBBox === 'function' && typeof viewer.zoomToBBox === 'function') {
+                            const box = viewer.getBBox();
+                            if (box && (box.max.x - box.min.x) > 0) {
+                                viewer.zoomToBBox(box);
+                            } else if (typeof viewer.homeView === 'function') {
+                                viewer.homeView();
+                            }
+                        } else if (typeof viewer.homeView === 'function') {
+                            viewer.homeView();
+                        } else if (typeof viewer.zoomExtents === 'function') {
+                            viewer.zoomExtents();
+                        }
+                    } catch(e) {
+                        console.log("Error zooming to extents", e);
+                    }
+                    break;
+                case 'distance':
+                    if (window.measurementPlugin) {
+                        const btn = document.getElementById("btn-distance");
+                        const isCurrentlyActive = btn.classList.contains("active");
+                        
+                        try {
+                            if (!isCurrentlyActive) {
+                                let type = 1;
+                                if (window.MeasurementType) {
+                                    type = window.MeasurementType.Distance || window.MeasurementType.DISTANCE || 1;
+                                }
+                                
+                                window.measurementPlugin.activate(type);
+                                btn.classList.add("active");
+                                window._hudManuallyClosed = false; 
+                                console.log("Distance tool activated manually:", type);
+                            } else {
+                                window.measurementPlugin.deactivate();
+                                btn.classList.remove("active");
+                                if (window.draggableExtension && window.draggableExtension.deactivate) {
+                                    window.draggableExtension.deactivate();
+                                }
+                            }
+                        } catch(err) {
+                            console.error("Distance tool action failed:", err);
+                        }
+                    }
+                    break;
+                case 'fullscreen':
+                    const container = document.getElementById("viewer-container");
+                    if (!document.fullscreenElement) {
+                        try {
+                            await container.requestFullscreen();
+                            const btn = document.getElementById("fullscreen-btn");
+                            if (btn) btn.innerHTML = '<i data-lucide="minimize"></i><span class="toolbar-tooltip">Exit Fullscreen</span>';
+                            lucide.createIcons();
+                        } catch (err) {
+                            console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+                        }
+                    } else {
+                        document.exitFullscreen();
+                        const btn = document.getElementById("fullscreen-btn");
+                        if (btn) btn.innerHTML = '<i data-lucide="expand"></i><span class="toolbar-tooltip">Fullscreen</span>';
+                        lucide.createIcons();
+                    }
+                    break;
+            }
+        };
+
+        // Drag and Drop
+        const dropZone = document.getElementById('drop-zone');
+        if (dropZone) {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(name => {
+                dropZone.addEventListener(name, e => { e.preventDefault(); e.stopPropagation(); });
+            });
+            ['dragenter', 'dragover'].forEach(name => {
+                dropZone.addEventListener(name, () => dropZone.classList.add('border-blue-500', 'bg-blue-50/50'));
+            });
+            ['dragleave', 'drop'].forEach(name => {
+                dropZone.addEventListener(name, () => dropZone.classList.remove('border-blue-500', 'bg-blue-50/50'));
+            });
+            dropZone.addEventListener('drop', e => {
+                const file = e.dataTransfer.files[0];
+                if (file) window.openViewerWithFile(file);
+            });
+        }
+
+        // Pre-initialize viewer in the background
+        setTimeout(() => {
+            initViewer().catch(err => console.warn("Background init deferred:", err));
+        }, 1000);
+    </script>
+    <script>
+        const sampleProjects = [
+            { id: 'dwg0', name: 'View Simple 1', thumbnail: 'images/snapshots/dxf_1.png', file: 'models/dxf/dxf_1.dxf', type: 'DWG' },
+            { id: 'dwg1', name: 'View Simple 2', thumbnail: 'images/snapshots/dxf_2.png', file: 'models/dwg/dwg_1.dwg', type: 'DWG' },
+            { id: 'dwg2', name: 'View Simple 3', thumbnail: 'images/snapshots/dxf_compare_1.png', file: 'models/dwg/dwg_2.dwg', type: 'DWG' },
+            { id: 'dxf0', name: 'View Simple 4', thumbnail: 'images/snapshots/pdf_1.png', file: 'models/dxf/dxf_0.dxf', type: 'DXF' },
+        ];
+
+        const sampleCache = new Map();
+
+        window.openSample = async (id) => {
+            const project = sampleProjects.find(p => p.id === id);
+            if (!project) return;
+            
+            try {
+                let file;
+                if (sampleCache.has(id)) {
+                    file = sampleCache.get(id);
+                } else {
+                    const response = await fetch(project.file);
+                    if (!response.ok) throw new Error('Failed to fetch sample');
+                    const blob = await response.blob();
+                    const fileName = project.file.split('/').pop();
+                    file = new File([blob], fileName, { type: '' });
+                    sampleCache.set(id, file);
+                }
+                window.openViewerWithFile(file);
+                window.addToRecent(id);
+            } catch (err) {
+                console.error("Error opening sample:", err);
+                alert("Failed to load sample drawing.");
+            }
+        };
+
+        window.prefetchSample = async (id) => {
+            if (sampleCache.has(id)) return;
+            const project = sampleProjects.find(p => p.id === id);
+            if (!project) return;
+            try {
+                const response = await fetch(project.file);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const fileName = project.file.split('/').pop();
+                    sampleCache.set(id, new File([blob], fileName, { type: '' }));
+                }
+            } catch (e) {}
+        };
+
+        function createCard(project) {
+            return `
+                <div onclick="openSample('${project.id}')" onmouseenter="prefetchSample('${project.id}')" class="cursor-pointer group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-slate-200 flex flex-col h-full">
+                    <div class="aspect-video relative overflow-hidden bg-slate-100/50 p-4 border-b border-slate-100 flex items-center justify-center">
+                        <img src="${project.thumbnail}" alt="${project.name}" 
+                             onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/337/337937.png'; this.classList.add('opacity-40');"
+                             class="w-full h-full object-contain drop-shadow-md group-hover:scale-105 transition-transform duration-500">
+                    </div>
+                    <div class="p-4 flex items-center justify-between bg-white">
+                        <div class="flex flex-col">
+                            <span class="text-sm font-bold text-slate-800 tracking-tight">${project.name}</span>
+                        </div>
+                        <div class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-blue-600 transition-colors shrink-0">
+                            <i data-lucide="arrow-up-right" class="w-4 h-4 text-blue-500 group-hover:text-white"></i>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function populateSamples() {
+            const container = document.getElementById('section-samples');
+            if (container) {
+                container.innerHTML = sampleProjects.map(p => createCard(p)).join('');
+                lucide.createIcons();
+            }
+        }
+
+        window.switchTab = function(tabId) {
+            const tabs = ['recent', 'samples'];
+            tabs.forEach(id => {
+                const btn = document.getElementById(`tab-${id}`);
+                const section = document.getElementById(`section-${id}`);
+                if (!btn || !section) return;
+                if (id === tabId) {
+                    btn.classList.add('border-blue-600', 'text-blue-600');
+                    btn.classList.remove('border-transparent', 'text-slate-500');
+                    section.classList.remove('hidden');
+                } else {
+                    btn.classList.remove('border-blue-600', 'text-blue-600');
+                    btn.classList.add('border-transparent', 'text-slate-500');
+                    section.classList.add('hidden');
+                }
+            });
+            if (tabId === 'recent') renderRecent();
+        }
+
+        window.addToRecent = function(id) {
+            let recent = JSON.parse(localStorage.getItem('recent_drawings') || '[]');
+            recent = recent.filter(item => item !== id);
+            recent.unshift(id);
+            recent = recent.slice(0, 8);
+            localStorage.setItem('recent_drawings', JSON.stringify(recent));
+        }
+
+        function renderRecent() {
+            const recentIds = JSON.parse(localStorage.getItem('recent_drawings') || '[]');
+            const emptyState = document.getElementById('empty-recent');
+            const grid = document.getElementById('recent-grid');
+            
+            if (!emptyState || !grid) return;
+
+            if (recentIds.length === 0) {
+                emptyState.classList.remove('hidden');
+                grid.innerHTML = '';
+            } else {
+                emptyState.classList.add('hidden');
+                const recentProjects = recentIds.map(id => sampleProjects.find(p => p.id === id)).filter(p => !!p);
+                grid.innerHTML = recentProjects.map(p => createCard(p)).join('');
+                lucide.createIcons();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            populateSamples();
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>

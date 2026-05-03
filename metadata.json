@@ -1,0 +1,6 @@
+{
+  "name": "Professional CAD Web Viewer",
+  "description": "High-performance WebGL-based viewer for DXF, DWG, and PDF files. Fast, private, and powerful engineering visualization in your browser.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

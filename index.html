@@ -570,7 +570,7 @@
                 };
 
                 viewer = new Viewer2d(viewerCfg);
-                const fontFiles = ["libs/fonts/simplex.shx", "libs/fonts/hztxt.shx", "libs/fonts/arial.ttf", "libs/fonts/Microsoft_YaHei.ttf"];
+                const fontFiles = ["./libs/fonts/simplex.shx", "./libs/fonts/hztxt.shx", "./libs/fonts/arial.ttf", "./libs/fonts/Microsoft_YaHei.ttf"];
                 await viewer.setFont(fontFiles);
 
                 let toastTimeout;
@@ -706,7 +706,7 @@
                 });
                 
                 modelUploader = new LocalDxfUploader(viewer);
-                modelUploader.setPdfWorker("libs/pdf/pdf.worker.min.js");
+                modelUploader.setPdfWorker("./libs/pdf/pdf.worker.min.js");
                 
                 modelUploader.onSuccess = (event) => {
                     if (event && event.fileName) {
@@ -1120,10 +1120,10 @@
     </script>
     <script>
         const sampleProjects = [
-            { id: 'dwg0', name: 'View Simple 1', thumbnail: 'images/snapshots/dxf_1.png', file: 'models/dxf/dxf_1.dxf', type: 'DWG' },
-            { id: 'dwg1', name: 'View Simple 2', thumbnail: 'images/snapshots/dxf_2.png', file: 'models/dwg/dwg_1.dwg', type: 'DWG' },
-            { id: 'dwg2', name: 'View Simple 3', thumbnail: 'images/snapshots/dxf_compare_1.png', file: 'models/dwg/dwg_2.dwg', type: 'DWG' },
-            { id: 'dxf0', name: 'View Simple 4', thumbnail: 'images/snapshots/pdf_1.png', file: 'models/dxf/dxf_0.dxf', type: 'DXF' },
+            { id: 'dwg0', name: 'View Simple 1', thumbnail: './images/snapshots/dxf_1.png', file: './models/dxf/dxf_1.dxf', type: 'DWG' },
+            { id: 'dwg1', name: 'View Simple 2', thumbnail: './images/snapshots/dxf_2.png', file: './models/dwg/dwg_1.dwg', type: 'DWG' },
+            { id: 'dwg2', name: 'View Simple 3', thumbnail: './images/snapshots/dxf_compare_1.png', file: './models/dwg/dwg_2.dwg', type: 'DWG' },
+            { id: 'dxf0', name: 'View Simple 4', thumbnail: './images/snapshots/pdf_1.png', file: './models/dxf/dxf_0.dxf', type: 'DXF' },
         ];
 
         const sampleCache = new Map();

@@ -137,7 +137,7 @@
             loadingProgressBar?.updateProgress(progressItemId, "Loading", progress);
             console.log(`[Demo] Loading '${modelCfg.modelId}' progress: ${progress.toFixed(1)}%`);
         };
-        const pdfLoader = new PdfLoaderPlugin(viewer, { font: viewer.fontManager, pdfWorker: "libs/pdf/pdf.worker.min.js" });
+        const pdfLoader = new PdfLoaderPlugin(viewer, { font: viewer.fontManager, pdfWorker: "./libs/pdf/pdf.worker.min.js" });
         const model = await pdfLoader.loadAsync(modelCfg, onProgress);
         console.log(model);
         viewer.addModel(model);

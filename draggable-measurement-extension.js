@@ -124,11 +124,11 @@ class DraggableMeasurementExtension {
 
     _syncCanvasSize() {
         const viewerTarget = document.getElementById('myCanvas');
-        if (!viewerTarget) return;
+        if (!viewerTarget || !this.ctx) return;
         const rect = viewerTarget.getBoundingClientRect();
-        if (!rect || rect.width <= 0 || rect.height <= 0) return;
+        if (!rect || rect.width <= 0 || rect.height <= 0 || !isFinite(rect.width) || !isFinite(rect.height)) return;
         
-        const dpr = window.devicePixelRatio || 1;
+        const dpr = Math.max(1, window.devicePixelRatio || 1);
 
         this.canvas.style.top = `${rect.top}px`;
         this.canvas.style.left = `${rect.left}px`;
@@ -141,6 +141,9 @@ class DraggableMeasurementExtension {
         const width = Math.min(maxWidth, rect.width * dpr);
         const height = Math.min(maxHeight, rect.height * dpr);
 
+        this.logicalWidth = rect.width;
+        this.logicalHeight = rect.height;
+
         if (this.canvas.width !== width || this.canvas.height !== height) {
             this.canvas.width = width;
             this.canvas.height = height;
@@ -151,7 +154,7 @@ class DraggableMeasurementExtension {
         const scaleX = Math.min(maxWidth / (rect.width || 1), dpr);
         const scaleY = Math.min(maxHeight / (rect.height || 1), dpr);
         
-        if (isFinite(scaleX) && isFinite(scaleY)) {
+        if (isFinite(scaleX) && isFinite(scaleY) && scaleX > 0 && scaleY > 0) {
             this.ctx.scale(scaleX, scaleY);
         }
         
@@ -305,7 +308,14 @@ class DraggableMeasurementExtension {
 
     _redrawHandles() {
         if (!this.ctx || this.state === 'IDLE') return;
-        this.ctx.clearRect(0, 0, this.canvas.width / (window.devicePixelRatio || 1), this.canvas.height / (window.devicePixelRatio || 1));
+        
+        // Use logical dimensions for clearing if available, otherwise fallback
+        const w = this.logicalWidth || (this.canvas.width / (window.devicePixelRatio || 1));
+        const h = this.logicalHeight || (this.canvas.height / (window.devicePixelRatio || 1));
+        
+        if (isFinite(w) && isFinite(h) && w > 0 && h > 0) {
+            this.ctx.clearRect(0, 0, w, h);
+        }
 
         const s1 = this._worldToScreen(this.p1World);
         const s2 = this._worldToScreen(this.p2World);
@@ -328,7 +338,9 @@ class DraggableMeasurementExtension {
     }
 
     _drawHandle(pos, color, active) {
+        if (!pos || !isFinite(pos.x) || !isFinite(pos.y)) return;
         const r = active ? this.deviceConfig.handleRadius * 1.4 : this.deviceConfig.handleRadius;
+        if (!isFinite(r) || r <= 0) return;
         
         this.ctx.save();
         this.ctx.shadowBlur = active ? 20 : 8;
@@ -389,11 +401,19 @@ class DraggableMeasurementExtension {
     }
 
     _clampToScreen(pos) {
+        if (!pos) return { x: 0, y: 0 };
         const viewerTarget = document.getElementById('myCanvas');
+        if (!viewerTarget) return { x: pos.x || 0, y: pos.y || 0 };
         const rect = viewerTarget.getBoundingClientRect();
+        
+        const x = isFinite(pos.x) ? pos.x : 0;
+        const y = isFinite(pos.y) ? pos.y : 0;
+        const w = (rect && isFinite(rect.width) && rect.width > 0) ? rect.width : 1;
+        const h = (rect && isFinite(rect.height) && rect.height > 0) ? rect.height : 1;
+
         return {
-            x: Math.max(0, Math.min(rect.width, pos.x)),
-            y: Math.max(0, Math.min(rect.height, pos.y))
+            x: Math.max(0, Math.min(w, x)),
+            y: Math.max(0, Math.min(h, y))
         };
     }
 
@@ -590,18 +610,32 @@ class DraggableMeasurementExtension {
     }
 
     _formatDistance(val, unit) {
-        if (!isFinite(val)) return '0.00 ' + unit;
-        switch(unit) {
-            case 'cm': return (val * 100).toFixed(2);
-            case 'mm': return (val * 1000).toFixed(1);
-            case 'ft': return (val * 3.28084).toFixed(3);
-            case 'ft-in': {
-                const totalInches = val * 39.3701;
-                const feet = Math.floor(Math.max(0, totalInches) / 12);
-                const inches = Math.round(Math.max(0, totalInches) % 12);
-                return `${feet}' ${inches}"`;
+        try {
+            if (!isFinite(val)) return '0.00 ' + unit;
+            switch(unit) {
+                case 'cm': {
+                    const scaled = val * 100;
+                    return isFinite(scaled) ? scaled.toFixed(2) : '0.00';
+                }
+                case 'mm': {
+                    const scaled = val * 1000;
+                    return isFinite(scaled) ? scaled.toFixed(1) : '0.0';
+                }
+                case 'ft': {
+                    const scaled = val * 3.28084;
+                    return isFinite(scaled) ? scaled.toFixed(3) : '0.000';
+                }
+                case 'ft-in': {
+                    const totalInches = val * 39.3701;
+                    if (!isFinite(totalInches)) return '0\' 0"';
+                    const feet = Math.floor(Math.max(0, totalInches) / 12);
+                    const inches = Math.round(Math.max(0, totalInches) % 12);
+                    return `${feet}' ${inches}"`;
+                }
+                default: return val.toFixed(3);
             }
-            default: return val.toFixed(3);
+        } catch(e) {
+            return '0.000';
         }
     }
 }

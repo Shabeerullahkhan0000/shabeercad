@@ -670,10 +670,11 @@
                                     const pts = distMeasure.drawingPoints;
                                     const p1 = pts[0];
                                     const p2 = pts[pts.length - 1]; 
-                                    if (p1 && p2 && isFinite(p1.x) && isFinite(p2.x)) {
+                                    if (p1 && p2 && isFinite(p1.x) && isFinite(p2.x) && isFinite(p1.y) && isFinite(p2.y)) {
                                         const dx = p1.x - p2.x;
                                         const dy = p1.y - p2.y;
-                                        text = Math.sqrt(dx*dx + dy*dy).toFixed(2);
+                                        const hypot = Math.sqrt(dx*dx + dy*dy);
+                                        if (isFinite(hypot)) text = hypot.toFixed(2);
                                     }
                                 }
                                 if (text) showHUD(text, 'live');
@@ -820,10 +821,10 @@
             let isTaskDone = false;
             
             const updateUI = (p) => {
-                if (measurementEl) measurementEl.textContent = p.toFixed(2);
+                if (measurementEl && isFinite(p)) measurementEl.textContent = p.toFixed(2);
                 
                 const container = document.querySelector('.dimension-line-container');
-                if (!container) return;
+                if (!container || !isFinite(p)) return;
                 
                 const containerWidth = container.offsetWidth;
                 const pPx = (p / 100) * containerWidth;
@@ -920,9 +921,16 @@
                     const srcUrl = URL.createObjectURL(file);
                     try {
                         // loadModel replaces the current model
-                        await v.loadModel({ src: srcUrl, fileName: file.name });
-                        canvasContainer.style.visibility = "visible";
-                        canvasContainer.style.opacity = "1";
+                        if (v && typeof v.loadModel === 'function') {
+                            await v.loadModel({ src: srcUrl, fileName: file.name });
+                        } else if (v && typeof v.open === 'function') {
+                            await v.open(srcUrl, file.name);
+                        }
+                        
+                        if (canvasContainer) {
+                            canvasContainer.style.visibility = "visible";
+                            canvasContainer.style.opacity = "1";
+                        }
                         fileNameDisplay.textContent = file.name;
                         fileNameDisplay.title = file.name;
                         
@@ -936,13 +944,13 @@
                                         type = window.MeasurementType.Distance || window.MeasurementType.DISTANCE || 1;
                                     }
                                     
-                                    window.measurementPlugin.activate(type);
+                                    if (typeof window.measurementPlugin.activate === 'function') {
+                                        window.measurementPlugin.activate(type);
+                                    }
                                     
                                     // Update UI
                                     const distanceBtn = document.getElementById("btn-distance");
                                     if (distanceBtn) distanceBtn.classList.add("active");
-                                    
-                                    console.log("Default measurement tool activated:", type);
                                 } catch(err) {
                                     console.warn("Default measurement activation deferred:", err);
                                 }
@@ -950,17 +958,19 @@
                         }
                     } catch (err) {
                         console.error("Error loading model:", err);
-                        alert("Unable to open this CAD file. Please ensure it is a valid DWG, DXF, or PDF.");
+                        const msg = err && err.name === 'RangeError' ? 
+                            "Drawing is too complex or file is corrupted (RangeError)." : 
+                            "Unable to open this CAD file. Please ensure it is a valid DWG, DXF, or PDF.";
+                        alert(msg);
                         fileNameDisplay.textContent = "Error: " + file.name;
                     } finally {
-                        // We keep the URL around for the viewer, or it might need it during render. 
-                        // Actually, once loadModel is called, it's usually fine to revoke if it reads it immediately.
-                        // But for safety with some viewers, we revoke in close.
+                        // We keep the URL around for the viewer
                     }
                 }
             } catch (initErr) {
-                console.error("Request failed:", initErr);
-                alert("Failed to display the selected file.");
+                console.error("Initialization failed:", initErr);
+                const errorDetail = initErr instanceof Error ? initErr.message : String(initErr);
+                alert("Failed to initialize viewer: " + errorDetail);
             } finally {
                 isTaskDone = true;
             }

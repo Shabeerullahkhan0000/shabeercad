@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 3000 --host 0.0.0.0",
-    "build": "mkdir -p dist && cp -r libs models images iconfont index.html draggable-measurement-extension.js global.css favicon.ico dist/ 2>/dev/null || true"
+    "build": "vite build",
+    "postbuild": "node scripts/copy-assets.cjs",
+    "preview": "vite preview",
+    "deploy": "npm run build && echo 'Build complete! Ready for deployment.'"
   },
   "devDependencies": {
     "vite": "^8.0.11"

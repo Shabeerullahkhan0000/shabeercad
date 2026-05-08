@@ -944,10 +944,23 @@
                     imgContainer.classList.remove("flex");
                     canvasContainer.style.visibility = "hidden";
                     
-                    // Allow browser a frame to apply display: block to viewer-container 
+// Allow browser a frame to apply display: block to viewer-container 
                     // and calculate #myCanvas size to avoid RangeError
                     await new Promise(resolve => requestAnimationFrame(resolve));
                     await new Promise(resolve => setTimeout(resolve, 50));
+                    
+// DEFENSIVE: Verify #myCanvas has valid dimensions before viewer operations
+                    if (canvasContainer) {
+                        const rect = canvasContainer.getBoundingClientRect();
+                        // If canvas has invalid dimensions (0 or negative), force explicit sizing
+                        if (!rect.width || !rect.height || rect.width <= 0 || rect.height <= 0) {
+                            console.warn("Canvas dimensions invalid, applying fix...");
+                            canvasContainer.style.width = "100%";
+                            canvasContainer.style.height = "100%";
+                            // Give browser another frame to apply
+                            await new Promise(resolve => requestAnimationFrame(resolve));
+                        }
+                    }
                     
                     // Ensure viewer is ready
                     const v = await initViewer();

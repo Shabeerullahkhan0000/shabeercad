@@ -1,5 +1,5 @@
 /**
- * copy-assets.js
+ * copy-assets.cjs
  * 
  * Copies static assets to dist/ after Vite build.
  * Run this after `npm run build` to ensure all static assets are included.
@@ -17,6 +17,13 @@ const dirsToCopy = [
     'models',
     'images',
     'iconfont'
+];
+
+// Individual root-level files to copy to dist/
+const filesToCopy = [
+    'favicon.ico',
+    'robots.txt',
+    'CNAME'
 ];
 
 function copyDirectory(src, dest) {
@@ -48,6 +55,15 @@ function copyDirectory(src, dest) {
     }
 }
 
+function copyFile(src, dest) {
+    try {
+        fs.copyFileSync(src, dest);
+        console.log(`Copied: ${path.basename(src)}`);
+    } catch (err) {
+        console.error(`Error copying ${src}: ${err.message}`);
+    }
+}
+
 function main() {
     console.log('========================================');
     console.log('Copying static assets to dist/');
@@ -62,6 +78,19 @@ function main() {
             copyDirectory(srcPath, destPath);
         } else {
             console.warn(`Warning: ${dir}/ not found in source, skipping`);
+        }
+    }
+
+    // Copy individual root-level files
+    console.log('\nProcessing: root files');
+    for (const file of filesToCopy) {
+        const srcPath = path.join(srcDir, file);
+        const destPath = path.join(distDir, file);
+
+        if (fs.existsSync(srcPath)) {
+            copyFile(srcPath, destPath);
+        } else {
+            console.warn(`Warning: ${file} not found in source, skipping`);
         }
     }
 

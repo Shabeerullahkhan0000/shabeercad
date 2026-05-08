@@ -565,20 +565,21 @@
             if (viewerPromise) return viewerPromise;
 
             viewerPromise = (async () => {
-                const viewerCfg = {
-                    containerId: "myCanvas",
-                    language,
-                    enableSpinner: false,
-                    enableProgressBar: false,
-                    enableLayoutBar: false,
-                    enableLocalCache: false,
-                };
+                try {
+                    const viewerCfg = {
+                        containerId: "myCanvas",
+                        language,
+                        enableSpinner: false,
+                        enableProgressBar: false,
+                        enableLayoutBar: false,
+                        enableLocalCache: false,
+                    };
 
-                viewer = new Viewer2d(viewerCfg);
-                const fontFiles = ["libs/fonts/simplex.shx", "libs/fonts/hztxt.shx", "libs/fonts/arial.ttf", "libs/fonts/Microsoft_YaHei.ttf"];
-                await viewer.setFont(fontFiles);
+                    viewer = new Viewer2d(viewerCfg);
+                    const fontFiles = ["libs/fonts/simplex.shx", "libs/fonts/hztxt.shx", "libs/fonts/arial.ttf", "libs/fonts/Microsoft_YaHei.ttf"];
+                    await viewer.setFont(fontFiles);
 
-                let toastTimeout;
+                    let toastTimeout;
                 window.measurementPlugin = new MeasurementPlugin(viewer, { language });
                 
                 // Initialize Professional Draggable Measurement Extension
@@ -754,6 +755,11 @@
                 };
 
                 return viewer;
+                } catch (e) {
+                    viewerPromise = null;
+                    viewer = null;
+                    throw e;
+                }
             })();
 
             return viewerPromise;

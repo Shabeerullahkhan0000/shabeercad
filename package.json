@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npx serve . -l 3000",
-    "build": "echo \"No build step required\""
+    "dev": "vite --port 3000 --host 0.0.0.0",
+    "build": "mkdir -p dist && cp -r libs models images iconfont index.html draggable-measurement-extension.js global.css favicon.ico dist/ 2>/dev/null || true"
   },
   "devDependencies": {
     "vite": "^8.0.11"

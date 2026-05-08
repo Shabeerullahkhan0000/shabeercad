@@ -322,6 +322,11 @@
                 <span class="toolbar-tooltip">Distance</span>
             </button>
             <div class="w-8 h-px bg-white/10 mx-auto"></div>
+            <button class="toolbar-btn" id="btn-area" onclick="viewerAction('area')" title="Measure Area">
+                <i data-lucide="square-dashed"></i>
+                <span class="toolbar-tooltip">Area</span>
+            </button>
+            <div class="w-8 h-px bg-white/10 mx-auto"></div>
             <button class="toolbar-btn" id="fullscreen-btn" onclick="viewerAction('fullscreen')" title="Fullscreen">
                 <i data-lucide="expand"></i>
                 <span class="toolbar-tooltip">Fullscreen</span>
@@ -570,7 +575,7 @@
                 };
 
                 viewer = new Viewer2d(viewerCfg);
-                const fontFiles = ["./libs/fonts/simplex.shx", "./libs/fonts/hztxt.shx", "./libs/fonts/arial.ttf", "./libs/fonts/Microsoft_YaHei.ttf"];
+                const fontFiles = ["libs/fonts/simplex.shx", "libs/fonts/hztxt.shx", "libs/fonts/arial.ttf", "libs/fonts/Microsoft_YaHei.ttf"];
                 await viewer.setFont(fontFiles);
 
                 let toastTimeout;
@@ -600,7 +605,7 @@
                     }
                 };
 
-                const showHUD = (text, type = 'active') => {
+                const showHUD = (text, type = 'active', measureMode = 'Distance') => {
                     const toast = document.getElementById("measurement-toast");
                     const valueEl = document.getElementById("toast-distance-value");
                     const labelEl = document.getElementById("toast-status-label");
@@ -623,20 +628,23 @@
                         switch(type) {
                             case 'live':
                                 if (labelEl) {
-                                    labelEl.textContent = "Last Distance";
+                                    labelEl.textContent = "Last " + measureMode;
                                     labelEl.className = "text-blue-400 text-[8px] font-black uppercase tracking-[0.1em]";
                                 }
                                 indicatorEl.classList.add("bg-blue-500", "animate-pulse", "shadow-[0_0_8px_#3b82f6]");
                                 break;
                             case 'complete':
                                 if (labelEl) {
-                                    labelEl.textContent = "Last Distance";
+                                    labelEl.textContent = "Last " + measureMode;
                                     labelEl.className = "text-emerald-400 text-[8px] font-black uppercase tracking-[0.1em]";
                                 }
                                 indicatorEl.classList.add("bg-emerald-500", "shadow-[0_0_8px_#10b981]");
                                 break;
                             case 'ready':
-                                if (labelEl) labelEl.className = "text-amber-400 text-[8px] font-black uppercase tracking-[0.1em]";
+                                if (labelEl) {
+                                    labelEl.textContent = "Ready (" + measureMode + ")";
+                                    labelEl.className = "text-amber-400 text-[8px] font-black uppercase tracking-[0.1em]";
+                                }
                                 indicatorEl.classList.add("bg-amber-500", "animate-ping");
                                 break;
                         }
@@ -689,7 +697,34 @@
                             });
 
                             // Initial state if already activated
-                            if (distMeasure.actived) showHUD(null, 'ready');
+                            if (distMeasure.actived) showHUD(null, 'ready', 'Distance');
+                        }
+
+                        const areaMeasure = window.measurementPlugin.measurements[window.MeasurementType ? (window.MeasurementType.Area || window.MeasurementType.AREA || 2) : 2];
+                        if (areaMeasure && !areaMeasure._listenersAttached) {
+                            areaMeasure._listenersAttached = true;
+                            
+                            areaMeasure.addEventListener('firstpointpicked', () => {
+                                window._hudManuallyClosed = false; 
+                                showHUD("0.00", 'live', 'Area');
+                            });
+                            
+                            areaMeasure.addEventListener('update', () => {
+                                let text = "";
+                                if (areaMeasure.currentMeasureDrawable && isFinite(areaMeasure.currentMeasureDrawable.area)) {
+                                    text = areaMeasure.currentMeasureDrawable.area.toFixed(2);
+                                }
+                                if (text) showHUD(text, 'live', 'Area');
+                            });
+                            
+                            areaMeasure.addEventListener('complete', (event) => {
+                                const drawable = event.currentMeasureDrawable || event.data || event;
+                                if (drawable && isFinite(drawable.area)) {
+                                    showHUD(drawable.area.toFixed(2), 'complete', 'Area');
+                                }
+                            });
+
+                            if (areaMeasure.actived) showHUD(null, 'ready', 'Area');
                         }
                     }
                 };
@@ -700,13 +735,17 @@
                 // Viewer event as fallback/completion sync
                 viewer.addEventListener(ViewerEvent.MeasurementAdd, (event) => {
                     const data = event.data || event;
-                    if (data && isFinite(data.distance)) {
-                        showHUD(data.distance.toFixed(2), 'complete');
+                    if (data) {
+                        if (isFinite(data.area)) {
+                            showHUD(data.area.toFixed(2), 'complete', 'Area');
+                        } else if (isFinite(data.distance)) {
+                            showHUD(data.distance.toFixed(2), 'complete', 'Distance');
+                        }
                     }
                 });
                 
                 modelUploader = new LocalDxfUploader(viewer);
-                modelUploader.setPdfWorker("./libs/pdf/pdf.worker.min.js");
+                modelUploader.setPdfWorker("libs/pdf/pdf.worker.min.js");
                 
                 modelUploader.onSuccess = (event) => {
                     if (event && event.fileName) {
@@ -724,7 +763,9 @@
             if (!file) return;
             
             const btnDistance = document.getElementById("btn-distance");
+            const btnArea = document.getElementById("btn-area");
             if (btnDistance) btnDistance.classList.remove("active");
+            if (btnArea) btnArea.classList.remove("active");
             
             window._hudManuallyClosed = false; 
             if (window.hideHUD) window.hideHUD(); // Hide HUD explicitly during loading
@@ -1049,6 +1090,7 @@
                 case 'distance':
                     if (window.measurementPlugin) {
                         const btn = document.getElementById("btn-distance");
+                        const areaBtn = document.getElementById("btn-area");
                         const isCurrentlyActive = btn.classList.contains("active");
                         
                         try {
@@ -1060,6 +1102,10 @@
                                 
                                 window.measurementPlugin.activate(type);
                                 btn.classList.add("active");
+                                if (areaBtn) areaBtn.classList.remove("active");
+                                if (window.draggableExtension && window.draggableExtension.setMode) {
+                                    window.draggableExtension.setMode('distance');
+                                }
                                 window._hudManuallyClosed = false; 
                                 console.log("Distance tool activated manually:", type);
                             } else {
@@ -1071,6 +1117,38 @@
                             }
                         } catch(err) {
                             console.error("Distance tool action failed:", err);
+                        }
+                    }
+                    break;
+                case 'area':
+                    if (window.measurementPlugin) {
+                        const btn = document.getElementById("btn-area");
+                        const distBtn = document.getElementById("btn-distance");
+                        const isCurrentlyActive = btn.classList.contains("active");
+                        
+                        try {
+                            if (!isCurrentlyActive) {
+                                let type = 2;
+                                if (window.MeasurementType) {
+                                    type = window.MeasurementType.Area || window.MeasurementType.AREA || 2;
+                                }
+                                
+                                window.measurementPlugin.activate(type);
+                                btn.classList.add("active");
+                                if (distBtn) distBtn.classList.remove("active");
+                                if (window.draggableExtension && window.draggableExtension.setMode) {
+                                    window.draggableExtension.setMode('area');
+                                }
+                                console.log("Area tool activated manually:", type);
+                            } else {
+                                window.measurementPlugin.deactivate();
+                                btn.classList.remove("active");
+                                if (window.draggableExtension && window.draggableExtension.deactivate) {
+                                    window.draggableExtension.deactivate();
+                                }
+                            }
+                        } catch(err) {
+                            console.error("Area tool action failed:", err);
                         }
                     }
                     break;
@@ -1120,10 +1198,10 @@
     </script>
     <script>
         const sampleProjects = [
-            { id: 'dwg0', name: 'View Simple 1', thumbnail: './images/snapshots/dxf_1.png', file: './models/dxf/dxf_1.dxf', type: 'DWG' },
-            { id: 'dwg1', name: 'View Simple 2', thumbnail: './images/snapshots/dxf_2.png', file: './models/dwg/dwg_1.dwg', type: 'DWG' },
-            { id: 'dwg2', name: 'View Simple 3', thumbnail: './images/snapshots/dxf_compare_1.png', file: './models/dwg/dwg_2.dwg', type: 'DWG' },
-            { id: 'dxf0', name: 'View Simple 4', thumbnail: './images/snapshots/pdf_1.png', file: './models/dxf/dxf_0.dxf', type: 'DXF' },
+            { id: 'dwg0', name: 'View Simple 1', thumbnail: 'images/snapshots/dxf_1.png', file: 'models/dxf/dxf_1.dxf', type: 'DWG' },
+            { id: 'dwg1', name: 'View Simple 2', thumbnail: 'images/snapshots/dxf_2.png', file: 'models/dwg/dwg_1.dwg', type: 'DWG' },
+            { id: 'dwg2', name: 'View Simple 3', thumbnail: 'images/snapshots/dxf_compare_1.png', file: 'models/dwg/dwg_2.dwg', type: 'DWG' },
+            { id: 'dxf0', name: 'View Simple 4', thumbnail: 'images/snapshots/pdf_1.png', file: 'models/dxf/dxf_0.dxf', type: 'DXF' },
         ];
 
         const sampleCache = new Map();

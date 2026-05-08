@@ -4,14 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "mkdir -p dist && cp -r libs images iconfont index.html draggable-measurement-extension.js dist/ 2>/dev/null || true"
   },
-  "dependencies": {
-    "express": "^4.21.2"
-  },
-  "devDependencies": {
-    "vite": "^8.0.10"
-  }
+  "dependencies": {}
 }

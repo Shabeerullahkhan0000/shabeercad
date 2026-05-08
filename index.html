@@ -565,8 +565,9 @@
             if (viewer) return viewer;
             if (viewerPromise) return viewerPromise;
 
-            viewerPromise = (async () => {
+viewerPromise = (async () => {
                 try {
+                    console.log("[INIT] Creating Viewer2d with containerId: myCanvas");
                     const viewerCfg = {
                         containerId: "myCanvas",
                         language,
@@ -577,8 +578,12 @@
                     };
 
                     viewer = new Viewer2d(viewerCfg);
+                    console.log("[INIT] Viewer2d created, loading fonts...");
+                    
                     const fontFiles = ["libs/fonts/simplex.shx", "libs/fonts/hztxt.shx", "libs/fonts/arial.ttf", "libs/fonts/Microsoft_YaHei.ttf"];
+                    console.log("[INIT] Font files:", fontFiles);
                     await viewer.setFont(fontFiles);
+                    console.log("[INIT] Fonts loaded successfully");
 
                     let toastTimeout;
                 window.measurementPlugin = new MeasurementPlugin(viewer, { language });
@@ -967,11 +972,14 @@
                     if (loadingStatusPill) loadingStatusPill.textContent = "Rendering";
                     fileNameDisplay.textContent = "Loading " + file.name + "...";
                     
-                    const srcUrl = URL.createObjectURL(file);
+const srcUrl = URL.createObjectURL(file);
+                    console.log("[LOAD] Calling loadModel with src:", srcUrl, "fileName:", file.name);
                     try {
                         // loadModel replaces the current model
                         if (v && typeof v.loadModel === 'function') {
+                            console.log("[LOAD] About to call loadModel...");
                             await v.loadModel({ src: srcUrl, fileName: file.name });
+                            console.log("[LOAD] loadModel completed")
                         } else if (v && typeof v.open === 'function') {
                             await v.open(srcUrl, file.name);
                         }

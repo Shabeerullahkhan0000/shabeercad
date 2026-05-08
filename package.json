@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "mkdir -p dist && cp -r libs images iconfont index.html draggable-measurement-extension.js dist/ 2>/dev/null || true"
+    "dev": "npx serve . -l 3000",
+    "build": "echo \"No build step required\""
   },
-  "dependencies": {}
+  "devDependencies": {
+    "vite": "^8.0.11"
+  }
 }

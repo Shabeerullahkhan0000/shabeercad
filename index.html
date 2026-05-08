@@ -776,30 +776,13 @@
             const fileNameDisplay = document.getElementById("currentFileName");
             const imgContainer = document.getElementById("image-display-container");
             const imgDisplay = document.getElementById("image-display");
-            
-            // Re-create canvas to ensure it's empty
-            const oldCanvas = document.getElementById("myCanvas");
-            if (oldCanvas) {
-                const parent = oldCanvas.parentNode;
-                const newCanvas = document.createElement("div");
-                newCanvas.id = "myCanvas";
-                newCanvas.style.width = "100%";
-                newCanvas.style.height = "100%";
-                newCanvas.style.overflow = "hidden";
-                newCanvas.style.visibility = "hidden";
-                newCanvas.style.opacity = "0";
-                parent.replaceChild(newCanvas, oldCanvas);
-            }
             const canvasContainer = document.getElementById("myCanvas");
-
+            
             if (viewer) {
                 try {
-                    if (typeof viewer.dispose === 'function') viewer.dispose();
-                    else if (typeof viewer.destroy === 'function') viewer.destroy();
-                    else if (typeof viewer.uninitialize === 'function') viewer.uninitialize();
+                    if (typeof viewer.clearModel === 'function') viewer.clearModel();
+                    else if (typeof viewer.clear === 'function') viewer.clear();
                 } catch(e) {}
-                viewer = null;
-                viewerPromise = null;
             }
             
             imgDisplay.src = "";
@@ -954,6 +937,11 @@
                     imgContainer.classList.remove("flex");
                     canvasContainer.style.visibility = "hidden";
                     
+                    // Allow browser a frame to apply display: block to viewer-container 
+                    // and calculate #myCanvas size to avoid RangeError
+                    await new Promise(resolve => requestAnimationFrame(resolve));
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    
                     // Ensure viewer is ready
                     const v = await initViewer();
                     if (loadingStatusPill) loadingStatusPill.textContent = "Rendering";
@@ -999,6 +987,7 @@
                         }
                     } catch (err) {
                         console.error("Error loading model:", err);
+                        console.error(err.stack);
                         const msg = err && err.name === 'RangeError' ? 
                             "Drawing is too complex or file is corrupted (RangeError)." : 
                             "Unable to open this CAD file. Please ensure it is a valid DWG, DXF, or PDF.";
@@ -1010,6 +999,7 @@
                 }
             } catch (initErr) {
                 console.error("Initialization failed:", initErr);
+                console.error(initErr.stack);
                 const errorDetail = initErr instanceof Error ? initErr.message : String(initErr);
                 alert("Failed to initialize viewer: " + errorDetail);
             } finally {
@@ -1191,10 +1181,8 @@
             });
         }
 
-        // Pre-initialize viewer in the background
-        setTimeout(() => {
-            initViewer().catch(err => console.warn("Background init deferred:", err));
-        }, 1000);
+        // Pre-initialize disabled due to hidden container issues
+        // setTimeout(() => { ... }, 1000);
     </script>
     <script>
         const sampleProjects = [

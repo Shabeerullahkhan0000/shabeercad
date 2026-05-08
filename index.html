@@ -810,13 +810,11 @@ viewerPromise = (async () => {
                 window.measurementPlugin = new MeasurementPlugin(viewer, { language });
                 
                 // Initialize Professional Draggable Measurement Extension
-                if (window.DraggableMeasurementExtension && !shouldUseFastMobileRender()) {
+                if (window.DraggableMeasurementExtension) {
                     if (window.draggableExtension && typeof window.draggableExtension.destroy === 'function') {
                         window.draggableExtension.destroy();
                     }
                     window.draggableExtension = new DraggableMeasurementExtension(viewer, window.measurementPlugin);
-                } else if (shouldUseFastMobileRender()) {
-                    window.draggableExtension = null;
                 }
                 
                 // Custom elegant HUD updating logic
@@ -892,6 +890,31 @@ viewerPromise = (async () => {
                         const distMeasure = window.measurementPlugin.measurements[window.MeasurementType.Distance];
                         if (distMeasure && !distMeasure._listenersAttached) {
                             distMeasure._listenersAttached = true;
+                            let lastDistancePoints = null;
+                            const rememberDistancePoints = (source) => {
+                                const candidates = [
+                                    source && source.points,
+                                    source && source.drawingPoints,
+                                    source && source.currentMeasureDrawable && source.currentMeasureDrawable.points,
+                                    distMeasure.drawingPoints,
+                                    distMeasure.currentMeasureDrawable && distMeasure.currentMeasureDrawable.points
+                                ];
+                                for (const points of candidates) {
+                                    if (Array.isArray(points) && points.length >= 2) {
+                                        const p1 = points[0];
+                                        const p2 = points[points.length - 1];
+                                        if (p1 && p2 && isFinite(p1.x) && isFinite(p1.y) && isFinite(p2.x) && isFinite(p2.y)) {
+                                            lastDistancePoints = [
+                                                { x: p1.x, y: p1.y, z: p1.z || 0 },
+                                                { x: p2.x, y: p2.y, z: p2.z || 0 }
+                                            ];
+                                            window._lastDistancePoints = lastDistancePoints;
+                                            return lastDistancePoints;
+                                        }
+                                    }
+                                }
+                                return lastDistancePoints;
+                            };
                             
                             // Start point selected
                             distMeasure.addEventListener('firstpointpicked', () => {
@@ -902,6 +925,7 @@ viewerPromise = (async () => {
                             // Live update during dragging
                             distMeasure.addEventListener('update', () => {
                                 let text = "";
+                                rememberDistancePoints(distMeasure);
                                 if (distMeasure.currentMeasureDrawable && isFinite(distMeasure.currentMeasureDrawable.distance)) {
                                     text = distMeasure.currentMeasureDrawable.distance.toFixed(2);
                                 } else if (distMeasure.drawingPoints && distMeasure.drawingPoints.length >= 2) {
@@ -921,6 +945,17 @@ viewerPromise = (async () => {
                             // Measurement finished
                             distMeasure.addEventListener('complete', (event) => {
                                 const drawable = event.currentMeasureDrawable || event.data || event;
+                                const points = rememberDistancePoints(drawable);
+                                if (window.draggableExtension && typeof window.draggableExtension.captureMeasurement === 'function') {
+                                    window.draggableExtension.captureMeasurement(drawable);
+                                }
+                                if (points && window.registerDraggableDistance) {
+                                    window.registerDraggableDistance(points, {
+                                        id: drawable && (drawable.id || drawable.guid || drawable.uuid),
+                                        distance: drawable && drawable.distance,
+                                        _manualDragMeasurement: true
+                                    });
+                                }
                                 if (drawable && isFinite(drawable.distance)) {
                                     showHUD(drawable.distance.toFixed(2), 'complete');
                                 }
@@ -967,6 +1002,9 @@ viewerPromise = (async () => {
                 viewer.addEventListener(ViewerEvent.MeasurementAdd, (event) => {
                     const data = event.data || event;
                     if (data) {
+                        if (window.draggableExtension && typeof window.draggableExtension.captureMeasurement === 'function') {
+                            window.draggableExtension.captureMeasurement(data);
+                        }
                         if (isFinite(data.area)) {
                             showHUD(data.area.toFixed(2), 'complete', 'Area');
                         } else if (isFinite(data.distance)) {

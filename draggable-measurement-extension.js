@@ -25,6 +25,8 @@ class DraggableMeasurementExtension {
         this.pointerId = null;
         this.isDragging = false;
         this.startDragPointWorld = null; // For delta calculation
+        this.mode = 'distance';
+        this.enabled = true;
         
         // 3. Snap System
         this.snapTarget = null; // { x, y, z, id, index }
@@ -42,6 +44,8 @@ class DraggableMeasurementExtension {
         // Config
         this.units = ['m', 'cm', 'mm', 'ft', 'ft-in'];
         this.currentUnitIndex = 0;
+        this._generatedIds = new WeakMap();
+        this._idCounter = 0;
 
         this._init();
     }
@@ -51,7 +55,7 @@ class DraggableMeasurementExtension {
         if (isTouch) {
             return { handleRadius: 16, activeHandleRadius: 22, hitRadius: 44, minDrag: 8 };
         }
-        return { handleRadius: 8, activeHandleRadius: 11, hitRadius: 16, minDrag: 4 };
+        return { handleRadius: 9, activeHandleRadius: 12, hitRadius: 30, minDrag: 4 };
     }
 
     _init() {
@@ -59,7 +63,67 @@ class DraggableMeasurementExtension {
         this._setupHUD();
         this._attachEvents();
         this._setupResizeObserver();
+        this._exposeGlobalAPI();
         this._syncWithPlugin();
+    }
+
+    _exposeGlobalAPI() {
+        window.registerDraggableMeasurement = (measurement) => this.captureMeasurement(measurement);
+        window.registerDraggableDistance = (points, meta = {}) => {
+            if (!Array.isArray(points) || points.length < 2) return false;
+            const measurement = Object.assign({}, meta, {
+                id: meta.id || `manual-distance-${Date.now()}-${this._idCounter + 1}`,
+                type: 'distance',
+                points: points.slice(0, 2).map(p => ({ x: p.x, y: p.y, z: p.z || 0 }))
+            });
+            return this.captureMeasurement(measurement);
+        };
+        window.refreshDraggableMeasurements = () => {
+            this._syncWithPlugin();
+            return Array.from(this.measurements.values());
+        };
+        window.getDraggableMeasurements = () => Array.from(this.measurements.values());
+        window.enableDraggableMeasurements = () => {
+            this.enabled = true;
+            this._syncWithPlugin();
+        };
+    }
+
+    setMode(mode) {
+        this.mode = mode || 'distance';
+        this.enabled = true;
+        this._syncWithPlugin();
+    }
+
+    captureMeasurement(measurement) {
+        const m = this._extractMeasurementFromEvent(measurement);
+        const points = this._extractPoints(m);
+        if (!m || !points || points.length < 2) return false;
+
+        const id = this._getMeasurementId(m);
+        if (!m.id) m.id = id;
+        if (!Array.isArray(m.points)) {
+            m.points = points.map(p => ({ x: p.x, y: p.y, z: p.z || 0 }));
+        }
+        this.sdkMeasurements.set(id, m);
+        this.activeMeasurementId = id;
+        this.enabled = true;
+        this._syncWithPlugin();
+        return true;
+    }
+
+    deactivate() {
+        this.enabled = false;
+        this.activeMeasurementId = null;
+        this.activeHandleIndex = null;
+        this.isDragging = false;
+        this.snapTarget = null;
+        this.snapType = 'none';
+        this.snapLocked = false;
+        if (this.canvas) this.canvas.style.pointerEvents = 'none';
+        document.body.style.cursor = '';
+        this.requestRedraw();
+        this._updateHUD();
     }
 
     _setupOverlay() {
@@ -76,7 +140,11 @@ class DraggableMeasurementExtension {
             touchAction: this.isTouchDevice ? 'none' : 'none'
         });
         
-        const container = document.getElementById('viewer-container') || document.body;
+        const viewerTarget = document.getElementById('myCanvas');
+        const container = (viewerTarget && viewerTarget.parentElement) || document.getElementById('viewer-container') || document.body;
+        if (container !== document.body && getComputedStyle(container).position === 'static') {
+            container.style.position = 'relative';
+        }
         container.appendChild(this.canvas);
         this.ctx = this.canvas.getContext('2d');
         this._syncCanvasSize();
@@ -86,10 +154,13 @@ class DraggableMeasurementExtension {
         const viewerTarget = document.getElementById('myCanvas');
         if (!viewerTarget || !this.ctx) return;
         const rect = viewerTarget.getBoundingClientRect();
+        const parentRect = this.canvas.parentElement && this.canvas.parentElement !== document.body
+            ? this.canvas.parentElement.getBoundingClientRect()
+            : { top: 0, left: 0 };
         const dpr = window.devicePixelRatio || 1;
 
-        this.canvas.style.top = `${rect.top}px`;
-        this.canvas.style.left = `${rect.left}px`;
+        this.canvas.style.top = `${rect.top - parentRect.top}px`;
+        this.canvas.style.left = `${rect.left - parentRect.left}px`;
         this.canvas.style.width = `${rect.width}px`;
         this.canvas.style.height = `${rect.height}px`;
 
@@ -114,7 +185,9 @@ class DraggableMeasurementExtension {
             this.deviceConfig = this._getDeviceConfig();
         });
         this._resizeObserver.observe(viewerTarget);
-        window.addEventListener('resize', () => this._syncCanvasSize());
+        this._resizeHandler = () => this._syncCanvasSize();
+        window.addEventListener('resize', this._resizeHandler);
+        this._syncInterval = window.setInterval(() => this._syncWithPlugin(), 500);
     }
 
     _setupHUD() {
@@ -165,15 +238,17 @@ class DraggableMeasurementExtension {
         const removeEvent = window.ViewerEvent ? window.ViewerEvent.MeasurementRemove : 'MeasurementRemove';
         
         const syncAdd = (e) => {
-            const m = e.data || e.measurement || e.drawable || e;
-            const id = m.id || m.guid || m.uuid;
-            if (id && m.points) this.sdkMeasurements.set(id, m);
+            const m = this._extractMeasurementFromEvent(e);
+            const points = this._extractPoints(m);
+            if (m && points && points.length >= 2) {
+                this.sdkMeasurements.set(this._getMeasurementId(m), m);
+            }
             this._syncWithPlugin();
         };
 
         const syncRemove = (e) => {
-            const m = e.data || e.measurement || e.drawable || e;
-            const id = m.id || m.guid || m.uuid;
+            const m = this._extractMeasurementFromEvent(e);
+            const id = m ? this._getMeasurementId(m) : null;
             if (id) this.sdkMeasurements.delete(id);
             this._syncWithPlugin();
         };
@@ -201,6 +276,7 @@ class DraggableMeasurementExtension {
         this.interactionMode = 'none'; // 'none' | 'pan' | 'drag_vertex' | 'select_measurement'
 
         this._blockEvent = (e) => {
+            if (!this.enabled) return false;
             if (this.hud && this.hud.contains(e.target)) return;
 
             if (this.isTouchDevice && (e.touches && e.touches.length > 1)) {
@@ -338,6 +414,8 @@ class DraggableMeasurementExtension {
             });
         }
         if (this._cursorHandler) window.removeEventListener('mousemove', this._cursorHandler, { capture: true });
+        if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
+        if (this._syncInterval) window.clearInterval(this._syncInterval);
         if (this.canvas && this.canvas.parentElement) this.canvas.parentElement.removeChild(this.canvas);
         if (this.hud && this.hud.parentElement) this.hud.parentElement.removeChild(this.hud);
         if (this._resizeObserver) this._resizeObserver.disconnect();
@@ -368,6 +446,7 @@ class DraggableMeasurementExtension {
                     if (val && Array.isArray(val.drawables)) raw.push(...val.drawables);
                     else if (val && Array.isArray(val.measurements)) raw.push(...val.measurements);
                     else if (val && Array.isArray(val.records)) raw.push(...val.records);
+                    else if (val && val.currentMeasureDrawable) raw.push(val.currentMeasureDrawable);
                     else raw.push(val); 
                 });
             }
@@ -376,15 +455,16 @@ class DraggableMeasurementExtension {
         const newMap = new Map();
         raw.forEach(m => {
             if (!m) return;
-            const points = m.points || m.vertices || m.coords || (m.data ? m.data.points || m.data.vertices || m.data.coords : null);
+            const points = this._extractPoints(m);
             if (!points || !Array.isArray(points) || points.length < 2) return;
             
-            const id = m.id || m.guid || m.uuid || (m.data ? (m.data.id || m.data.guid || m.data.uuid) : null) || Math.random().toString(36).substr(2, 9);
+            const id = this._getMeasurementId(m);
+            const type = this._getMeasurementType(m, points);
             
             newMap.set(id, {
                 id: id,
                 points: points.map(p => ({ x: p.x, y: p.y, z: p.z || 0 })),
-                type: (m.type || (m.data ? m.data.type : 'distance')).toString().toLowerCase(),
+                type,
                 sdkRef: m
             });
         });
@@ -396,6 +476,82 @@ class DraggableMeasurementExtension {
 
         this.requestRedraw();
         this._updateHUD();
+    }
+
+    _extractMeasurementFromEvent(event) {
+        const candidates = [
+            event && event.currentMeasureDrawable,
+            event && event.data && event.data.currentMeasureDrawable,
+            event && event.data,
+            event && event.measurement,
+            event && event.drawable,
+            event
+        ];
+
+        for (const candidate of candidates) {
+            if (candidate && this._extractPoints(candidate)) return candidate;
+        }
+        return candidates.find(Boolean) || null;
+    }
+
+    _extractPoints(measurement) {
+        if (!measurement) return null;
+        const data = measurement.data || {};
+        const candidates = [
+            measurement.points,
+            measurement.vertices,
+            measurement.coords,
+            measurement.drawingPoints,
+            data.points,
+            data.vertices,
+            data.coords,
+            data.drawingPoints,
+            measurement.currentMeasureDrawable && measurement.currentMeasureDrawable.points,
+            data.currentMeasureDrawable && data.currentMeasureDrawable.points
+        ];
+
+        for (const points of candidates) {
+            if (Array.isArray(points) && points.length >= 2 && points.every(p => p && isFinite(p.x) && isFinite(p.y))) {
+                return points;
+            }
+        }
+
+        const p1 = measurement.startPoint || measurement.firstPoint || measurement.pointA || measurement.p1 || measurement.origin || data.startPoint || data.firstPoint || data.pointA || data.p1 || data.origin;
+        const p2 = measurement.endPoint || measurement.secondPoint || measurement.pointB || measurement.p2 || measurement.target || data.endPoint || data.secondPoint || data.pointB || data.p2 || data.target;
+        if (p1 && p2 && isFinite(p1.x) && isFinite(p1.y) && isFinite(p2.x) && isFinite(p2.y)) {
+            return [p1, p2];
+        }
+
+        return null;
+    }
+
+    _getMeasurementId(measurement) {
+        if (!measurement) return null;
+        const data = measurement.data || {};
+        const id = measurement.id || measurement.guid || measurement.uuid || data.id || data.guid || data.uuid;
+        if (id) return String(id);
+
+        if (typeof measurement === 'object') {
+            if (!this._generatedIds.has(measurement)) {
+                this._idCounter += 1;
+                this._generatedIds.set(measurement, `measure-${this._idCounter}`);
+            }
+            return this._generatedIds.get(measurement);
+        }
+
+        this._idCounter += 1;
+        return `measure-${this._idCounter}`;
+    }
+
+    _getMeasurementType(measurement, points) {
+        const data = (measurement && measurement.data) || {};
+        const rawType = measurement && (measurement.type || data.type || measurement.measurementType || data.measurementType);
+        const normalized = rawType === undefined || rawType === null ? '' : String(rawType).toLowerCase();
+        if (normalized.includes('area') || normalized === '2') return 'area';
+        if (normalized.includes('distance') || normalized === '1') return 'distance';
+        if ((measurement && isFinite(measurement.area)) || isFinite(data.area)) return 'area';
+        if ((measurement && isFinite(measurement.distance)) || isFinite(data.distance)) return 'distance';
+        return points && points.length > 2 ? 'area' : 'distance';
     }
 
     _onViewerClick(e) {
@@ -424,6 +580,7 @@ class DraggableMeasurementExtension {
     }
 
     _hitTest(clientX, clientY) {
+        this._syncWithPlugin();
         const viewerTarget = document.getElementById('myCanvas');
         if (!viewerTarget) return null;
         const rect = viewerTarget.getBoundingClientRect();
@@ -461,6 +618,7 @@ class DraggableMeasurementExtension {
     }
 
     _lineHitTest(clientX, clientY) {
+        this._syncWithPlugin();
         const viewerTarget = document.getElementById('myCanvas');
         if (!viewerTarget) return null;
         const rect = viewerTarget.getBoundingClientRect();
@@ -710,6 +868,8 @@ class DraggableMeasurementExtension {
                 });
                 this.measurementPlugin.setMeasurements(collection);
             }
+            if (Array.isArray(m.sdkRef.points)) m.sdkRef.points = points;
+            if (m.sdkRef.data && Array.isArray(m.sdkRef.data.points)) m.sdkRef.data.points = points;
         } catch (err) {
             console.warn('DraggableExtension: Commit failed', err);
             this._syncWithPlugin();
@@ -753,8 +913,8 @@ class DraggableMeasurementExtension {
 
             const isDraggingThis = isActive && this.isDragging;
 
-            // Draw line overlay if dragging (ghost)
-            if (isDraggingThis) {
+            // Draw a lightweight overlay for manual/global measurements and active drags.
+            if (isDraggingThis || (isActive && m.sdkRef && m.sdkRef._manualDragMeasurement)) {
                 this.ctx.beginPath();
                 this.ctx.setLineDash([5, 5]);
                 this.ctx.strokeStyle = 'rgba(0, 229, 255, 0.7)';
@@ -891,9 +1051,33 @@ class DraggableMeasurementExtension {
         if (!this.viewer.worldToScreen) return null;
         try {
             const res = this.viewer.worldToScreen(world);
-            if (res && isFinite(res.x) && isFinite(res.y)) return res;
+            if (Array.isArray(res) && res.length >= 2 && isFinite(res[0]) && isFinite(res[1])) {
+                return this._normalizeScreenPoint({ x: res[0], y: res[1] });
+            }
+            if (res && isFinite(res.x) && isFinite(res.y)) return this._normalizeScreenPoint(res);
         } catch(e) {}
         return null;
+    }
+
+    _normalizeScreenPoint(point) {
+        const viewerTarget = document.getElementById('myCanvas');
+        if (!viewerTarget || !point) return point;
+
+        const rect = viewerTarget.getBoundingClientRect();
+        let x = point.x;
+        let y = point.y;
+
+        // Some @x-viewer builds return viewport/client coordinates, while
+        // others return canvas-local coordinates. Hit testing and overlay
+        // drawing both use canvas-local coordinates, so normalize here.
+        const looksLikeClientPoint = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+        const outsideLocalCanvas = x > rect.width || y > rect.height;
+        if (looksLikeClientPoint && outsideLocalCanvas) {
+            x -= rect.left;
+            y -= rect.top;
+        }
+
+        return { x, y };
     }
 
     _screenToWorld(clientX, clientY) {
@@ -907,8 +1091,35 @@ class DraggableMeasurementExtension {
             y: clientY - rect.top
         };
         try {
-            if (this.viewer.getHitResult) return this.viewer.getHitResult(coords);
+            if (this.viewer.getHitResult) return this._extractWorldPoint(this.viewer.getHitResult(coords));
         } catch(e) {}
+        return null;
+    }
+
+    _extractWorldPoint(result) {
+        if (!result) return null;
+        const candidates = [
+            result,
+            result.point,
+            result.position,
+            result.worldPoint,
+            result.worldPosition,
+            result.hitPoint,
+            result.intersection,
+            result.data && result.data.point,
+            result.data && result.data.worldPoint
+        ];
+
+        for (const point of candidates) {
+            if (point && isFinite(point.x) && isFinite(point.y)) {
+                return { x: point.x, y: point.y, z: point.z || 0 };
+            }
+        }
+
+        if (Array.isArray(result) && result.length >= 2 && isFinite(result[0]) && isFinite(result[1])) {
+            return { x: result[0], y: result[1], z: result[2] || 0 };
+        }
+
         return null;
     }
 

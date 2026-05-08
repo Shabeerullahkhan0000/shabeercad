@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DWG Viewer Dashboard</title>
+    <link rel="icon" type="image/png" href="images/final_3-removebg-preview.png">
     <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" type="text/css" href="./iconfont/iconfont.css" />
@@ -556,6 +557,18 @@
         let modelUploader = null;
         let viewerPromise = null;
         const language = "en";
+        const viewerObjectUrls = new Set();
+
+        function createViewerObjectUrl(file) {
+            const url = URL.createObjectURL(file);
+            viewerObjectUrls.add(url);
+            return url;
+        }
+
+        function revokeViewerObjectUrls() {
+            viewerObjectUrls.forEach(url => URL.revokeObjectURL(url));
+            viewerObjectUrls.clear();
+        }
         
         window.MeasurementType = MeasurementType;
         window.ToolbarMenuId = ToolbarMenuId;
@@ -582,8 +595,12 @@ viewerPromise = (async () => {
                     
                     const fontFiles = ["libs/fonts/simplex.shx", "libs/fonts/hztxt.shx", "libs/fonts/arial.ttf", "libs/fonts/Microsoft_YaHei.ttf"];
                     console.log("[INIT] Font files:", fontFiles);
-                    await viewer.setFont(fontFiles);
-                    console.log("[INIT] Fonts loaded successfully");
+                    try {
+                        await viewer.setFont(fontFiles);
+                        console.log("[INIT] Fonts loaded successfully");
+                    } catch (fontError) {
+                        console.warn("[INIT] CAD font loading failed; continuing without custom fonts:", fontError);
+                    }
 
                     let toastTimeout;
                 window.measurementPlugin = new MeasurementPlugin(viewer, { language });
@@ -773,6 +790,7 @@ viewerPromise = (async () => {
 
         window.openViewerWithFile = async (file) => {
             if (!file) return;
+            revokeViewerObjectUrls();
             
             const btnDistance = document.getElementById("btn-distance");
             const btnArea = document.getElementById("btn-area");
@@ -935,7 +953,7 @@ viewerPromise = (async () => {
                 if (isImage) {
                     if (loadingStatusPill) loadingStatusPill.textContent = "Loading Image";
                     fileNameDisplay.textContent = "Loading image " + file.name + "...";
-                    const srcUrl = URL.createObjectURL(file);
+                    const srcUrl = createViewerObjectUrl(file);
                     imgDisplay.src = srcUrl;
                     imgContainer.classList.remove("hidden");
                     imgContainer.classList.add("flex");
@@ -972,7 +990,7 @@ viewerPromise = (async () => {
                     if (loadingStatusPill) loadingStatusPill.textContent = "Rendering";
                     fileNameDisplay.textContent = "Loading " + file.name + "...";
                     
-const srcUrl = URL.createObjectURL(file);
+                    const srcUrl = createViewerObjectUrl(file);
                     console.log("[LOAD] Calling loadModel with src:", srcUrl, "fileName:", file.name);
                     try {
                         // loadModel replaces the current model
@@ -1036,6 +1054,8 @@ const srcUrl = URL.createObjectURL(file);
         };
 
         window.closeViewer = () => {
+            revokeViewerObjectUrls();
+
             const container = document.getElementById("viewer-container");
             const imgContainer = document.getElementById("image-display-container");
             const canvasContainer = document.getElementById("myCanvas");
@@ -1265,7 +1285,7 @@ const srcUrl = URL.createObjectURL(file);
                 <div onclick="openSample('${project.id}')" onmouseenter="prefetchSample('${project.id}')" class="cursor-pointer group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-slate-200 flex flex-col h-full">
                     <div class="aspect-video relative overflow-hidden bg-slate-100/50 p-4 border-b border-slate-100 flex items-center justify-center">
                         <img src="${project.thumbnail}" alt="${project.name}" 
-                             onerror="this.onerror=null; this.src='https://cdn-icons-png.flaticon.com/512/337/337937.png'; this.classList.add('opacity-40');"
+                             onerror="this.onerror=null; this.src='images/default-thumbnail.jpg'; this.classList.add('opacity-40');"
                              class="w-full h-full object-contain drop-shadow-md group-hover:scale-105 transition-transform duration-500">
                     </div>
                     <div class="p-4 flex items-center justify-between bg-white">

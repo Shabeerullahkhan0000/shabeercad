@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DWG Viewer Dashboard</title>
     <link rel="icon" type="image/png" href="images/final_3-removebg-preview.png">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    <link rel="dns-prefetch" href="https://unpkg.com">
     <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" type="text/css" href="./iconfont/iconfont.css" />
@@ -694,11 +698,10 @@ viewerPromise = (async () => {
                     
                     const fontFiles = ["libs/fonts/simplex.shx", "libs/fonts/hztxt.shx", "libs/fonts/arial.ttf", "libs/fonts/Microsoft_YaHei.ttf"];
                     console.log("[INIT] Font files:", fontFiles);
-                    try {
-                        await viewer.setFont(fontFiles);
-                        console.log("[INIT] Fonts loaded successfully");
-                    } catch (fontError) {
-                        console.warn("[INIT] CAD font loading failed; continuing without custom fonts:", fontError);
+                    if (typeof viewer.setFont === 'function') {
+                        Promise.resolve(viewer.setFont(fontFiles))
+                            .then(() => console.log("[INIT] Fonts loaded successfully"))
+                            .catch(fontError => console.warn("[INIT] CAD font loading failed; continuing without custom fonts:", fontError));
                     }
 
                     let toastTimeout;
@@ -1030,7 +1033,7 @@ viewerPromise = (async () => {
                     }
                 } else {
                     // Fast smooth surge to 100%
-                    progress += (100 - progress) * 0.2 + 0.4;
+                    progress = fastMobileRender ? 100 : progress + (100 - progress) * 0.55 + 8;
                     if (progress >= 99.9) {
                         progress = 100;
                         clearInterval(progressInterval);
@@ -1040,7 +1043,7 @@ viewerPromise = (async () => {
                             setTimeout(() => {
                                 toolbar.classList.add("visible");
                                 if (!fastMobileRender) lucide.createIcons();
-                            }, fastMobileRender ? 80 : 600);
+                            }, fastMobileRender ? 40 : 150);
                         }
                         
                         // Final hide
@@ -1049,7 +1052,7 @@ viewerPromise = (async () => {
                             overlay.classList.add("opacity-0", "pointer-events-none");
                             loadingCard.classList.remove("scale-100");
                             loadingCard.classList.add("scale-90");
-                        }, fastMobileRender ? 120 : 500);
+                        }, fastMobileRender ? 60 : 180);
                     }
                 }
                 updateUI(progress);

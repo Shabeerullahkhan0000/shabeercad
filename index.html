@@ -111,6 +111,104 @@
             opacity: 1;
             transform: translateX(0);
         }
+        #logo-wrapper {
+            top: max(0.35rem, env(safe-area-inset-top));
+            left: max(0.35rem, env(safe-area-inset-left));
+            pointer-events: none;
+        }
+        #brand-mark {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            min-width: 0;
+            border: 1px solid transparent;
+            border-radius: 1.25rem;
+            padding: 0.1rem;
+            background: transparent;
+            box-shadow: none;
+            pointer-events: auto;
+            isolation: isolate;
+            transition: padding 220ms ease, gap 220ms ease, background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease, border-radius 220ms ease;
+        }
+        #main-logo {
+            width: 7rem;
+            height: 5rem;
+            object-fit: contain;
+            transition: width 240ms ease, height 240ms ease, padding 240ms ease, transform 240ms ease;
+        }
+        #brand-name {
+            max-width: 0;
+            opacity: 0;
+            overflow: hidden;
+            white-space: nowrap;
+            color: #111827;
+            font-size: 0.78rem;
+            font-weight: 950;
+            letter-spacing: 0;
+            transform: translateX(-0.25rem);
+            transition: max-width 220ms ease, opacity 180ms ease, transform 220ms ease;
+        }
+        #brand-name::after {
+            content: "Viewer";
+            display: block;
+            margin-top: -0.1rem;
+            color: #2563eb;
+            font-size: 0.58rem;
+            font-weight: 900;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+        #logo-wrapper.logo-scrolled #brand-mark {
+            gap: 0.58rem;
+            padding: 0.42rem 0.82rem 0.42rem 0.44rem;
+            background:
+                linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.82)),
+                rgba(255, 255, 255, 0.86);
+            border-color: rgba(15, 23, 42, 0.1);
+            border-radius: 1.15rem;
+            box-shadow: 0 18px 50px rgba(15, 23, 42, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(18px) saturate(140%);
+            transform: translate(0.45rem, 0.45rem);
+        }
+        #logo-wrapper.logo-scrolled #main-logo {
+            width: 2.45rem;
+            height: 2.45rem;
+            padding: 0.16rem;
+            border-radius: 0.85rem;
+            background: linear-gradient(135deg, #0f172a, #1d4ed8);
+            box-shadow: 0 10px 24px rgba(37, 99, 235, 0.22);
+        }
+        #logo-wrapper.logo-scrolled #brand-name {
+            max-width: 7.8rem;
+            opacity: 1;
+            transform: translateX(0);
+        }
+        @media (min-width: 640px) {
+            #logo-wrapper {
+                top: 0;
+                left: 0;
+            }
+            #main-logo {
+                width: 16rem;
+                height: 12rem;
+                padding: 0.75rem 0.5rem 0.5rem 0.75rem;
+            }
+            #logo-wrapper.logo-scrolled #brand-mark {
+                transform: translate(1rem, 1rem);
+                padding: 0.48rem 1rem 0.48rem 0.5rem;
+                gap: 0.62rem;
+            }
+            #logo-wrapper.logo-scrolled #main-logo {
+                width: 2.75rem;
+                height: 2.75rem;
+            }
+            #brand-name {
+                font-size: 0.9rem;
+            }
+            #brand-name::after {
+                font-size: 0.62rem;
+            }
+        }
         @media (max-width: 640px) {
             #viewer-header {
                 top: max(0.75rem, env(safe-area-inset-top));
@@ -158,6 +256,19 @@
             .measurement-label-container {
                 padding: 0.45rem 0.85rem;
                 top: -36px;
+            }
+            #logo-wrapper.logo-scrolled #brand-mark {
+                transform: translate(0.2rem, 0.25rem);
+                padding: 0.35rem 0.68rem 0.35rem 0.36rem;
+                border-radius: 1rem;
+            }
+            #logo-wrapper.logo-scrolled #brand-name {
+                max-width: 6.8rem;
+            }
+            #logo-wrapper.logo-scrolled #main-logo {
+                width: 2.2rem;
+                height: 2.2rem;
+                border-radius: 0.75rem;
             }
         }
         @media (hover: none), (pointer: coarse) {
@@ -502,8 +613,11 @@
 
     <input type="file" id="hero-file-input" class="absolute pointer-events-none opacity-0 w-1 h-1" accept=".dwg,.dxf,.pdf,.png,.jpg,.jpeg,.bmp,.gif,application/pdf,application/acad,image/vnd.dwg,image/vnd.dxf,image/png,image/jpeg,image/gif">
     <!-- Fixed Logo -->
-    <div id="logo-wrapper" class="fixed top-0 left-0 z-50 flex flex-col items-start pointer-events-none transition-all duration-300 ease-in-out">
-        <img id="main-logo" src="images/final-3-removed-bg.png" alt="ShabeerCAD" class="h-20 w-28 sm:h-48 sm:w-64 object-contain pointer-events-auto transition-all duration-300 ease-in-out p-1 sm:p-2 sm:pl-3 sm:pt-3">
+    <div id="logo-wrapper" class="fixed z-50">
+        <button id="brand-mark" type="button" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })" aria-label="Back to top">
+            <img id="main-logo" src="images/final-3-removed-bg.png" alt="ShabeerCAD">
+            <span id="brand-name">ShabeerCAD</span>
+        </button>
     </div>
 
     <!-- Top Right Action -->
@@ -515,32 +629,20 @@
     </div>
 
     <script>
-        // Make the logo shrink on scroll to prevent overlapping significantly
-        let isShrunk = false;
+        // Morph the large logo into a compact brand pill while scrolling.
+        let isLogoScrolled = false;
         let scrollTicking = false;
 
         window.addEventListener('scroll', () => {
             if (!scrollTicking) {
                 window.requestAnimationFrame(() => {
-                    const logo = document.getElementById('main-logo');
                     const wrapper = document.getElementById('logo-wrapper');
+                    if (!wrapper) return;
+                    const shouldCompact = window.scrollY > 42;
                     
-                    if (window.scrollY > 50 && !isShrunk) {
-                        isShrunk = true;
-                        // Shrink when scrolled
-                        logo.classList.remove('h-20', 'sm:h-48', 'w-28', 'sm:w-64', 'sm:pl-3', 'sm:pt-3');
-                        logo.classList.add('h-14', 'w-14', 'sm:h-16', 'sm:w-16');
-                        
-                        // Add blur and background to wrapper, transform to round circle
-                        wrapper.classList.add('backdrop-blur-xl', 'bg-white/90', 'rounded-full', 'p-2', 'shadow-lg', 'pointer-events-auto', 'translate-x-3', 'translate-y-3');
-                    } else if (window.scrollY <= 50 && isShrunk) {
-                        isShrunk = false;
-                        // Return to original huge size
-                        logo.classList.add('h-20', 'sm:h-48', 'w-28', 'sm:w-64', 'sm:pl-3', 'sm:pt-3');
-                        logo.classList.remove('h-14', 'w-14', 'sm:h-16', 'sm:w-16');
-                        
-                        // Remove blur and background from wrapper
-                        wrapper.classList.remove('backdrop-blur-xl', 'bg-white/90', 'rounded-full', 'p-2', 'shadow-lg', 'pointer-events-auto', 'translate-x-3', 'translate-y-3');
+                    if (shouldCompact !== isLogoScrolled) {
+                        isLogoScrolled = shouldCompact;
+                        wrapper.classList.toggle('logo-scrolled', shouldCompact);
                     }
                     scrollTicking = false;
                 });
@@ -1111,11 +1213,16 @@ viewerPromise = (async () => {
                                 controls.enabled = true;
                                 if ('enablePan' in controls) controls.enablePan = true;
                                 if ('enableZoom' in controls) controls.enableZoom = true;
-                                if ('enableDamping' in controls) controls.enableDamping = true;
-                                if ('dampingFactor' in controls) controls.dampingFactor = 0.12;
-                                if ('touchDampingFactor' in controls) controls.touchDampingFactor = 0.12;
-                                if ('zoomSpeed' in controls) controls.zoomSpeed = Math.min(controls.zoomSpeed || 1, 0.9);
-                                if ('panSpeed' in controls) controls.panSpeed = Math.min(controls.panSpeed || 1, 0.9);
+                                if ('enableDamping' in controls) controls.enableDamping = false;
+                                if ('dampingFactor' in controls) controls.dampingFactor = 0.04;
+                                if ('touchDampingFactor' in controls) controls.touchDampingFactor = 0.04;
+                                if ('zoomSpeed' in controls) controls.zoomSpeed = Math.max(controls.zoomSpeed || 1, 1.15);
+                                if ('panSpeed' in controls) controls.panSpeed = Math.max(controls.panSpeed || 1, 1.18);
+                                if ('screenSpacePanning' in controls) controls.screenSpacePanning = true;
+                                if ('touches' in controls && controls.touches) {
+                                    if ('ONE' in controls.touches) controls.touches.ONE = controls.touches.ONE;
+                                    if ('TWO' in controls.touches) controls.touches.TWO = controls.touches.TWO;
+                                }
                             }
                             if (typeof v.resize === 'function') v.resize();
                             else if (typeof v.updateSize === 'function') v.updateSize();
@@ -1145,8 +1252,9 @@ viewerPromise = (async () => {
                         fileNameDisplay.textContent = file.name;
                         fileNameDisplay.title = file.name;
                         
-                        // Activate Measurement Tool By Default
-                        if (window.measurementPlugin) {
+                        // Activate Measurement Tool By Default on pointer-precise devices only.
+                        // On phones, leave navigation as the first interaction so pan/pinch never feels captured.
+                        if (window.measurementPlugin && !fastMobileRender) {
                             setTimeout(() => {
                                 try {
                                     // Robust type detection
@@ -1165,7 +1273,10 @@ viewerPromise = (async () => {
                                 } catch(err) {
                                     console.warn("Default measurement activation deferred:", err);
                                 }
-                            }, fastMobileRender ? 1600 : 800);
+                            }, 800);
+                        } else if (fastMobileRender) {
+                            const distanceBtn = document.getElementById("btn-distance");
+                            if (distanceBtn) distanceBtn.classList.remove("active");
                         }
                     } catch (err) {
                         console.error("Error loading model:", err);

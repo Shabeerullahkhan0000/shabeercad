@@ -37,6 +37,7 @@ class DraggableMeasurementExtension {
         this.ctx = null;
         this.hud = null;
         this.deviceConfig = this._getDeviceConfig();
+        this.isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.matchMedia('(pointer: coarse)').matches;
         
         // Config
         this.units = ['m', 'cm', 'mm', 'ft', 'ft-in'];
@@ -72,7 +73,7 @@ class DraggableMeasurementExtension {
             height: '100%',
             zIndex: '1000',
             pointerEvents: 'none', // Initial state: none
-            touchAction: 'none'    // CRITICAL: Block default browser touch actions
+            touchAction: this.isTouchDevice ? 'none' : 'none'
         });
         
         const container = document.getElementById('viewer-container') || document.body;
@@ -202,6 +203,11 @@ class DraggableMeasurementExtension {
         this._blockEvent = (e) => {
             if (this.hud && this.hud.contains(e.target)) return;
 
+            if (this.isTouchDevice && (e.touches && e.touches.length > 1)) {
+                this.interactionMode = 'pan';
+                return false;
+            }
+
             // 3. Mouse up -> Release Mode
             if (['pointerup', 'mouseup', 'touchend', 'pointercancel', 'touchcancel'].includes(e.type)) {
                 if (this.interactionMode === 'drag_vertex' || this.interactionMode === 'select_measurement') {
@@ -216,6 +222,9 @@ class DraggableMeasurementExtension {
 
             // 2. Mouse move -> Act based on mode
             if (['pointermove', 'mousemove', 'touchmove'].includes(e.type)) {
+                if (this.isTouchDevice && this.interactionMode !== 'drag_vertex' && this.interactionMode !== 'select_measurement') {
+                    return false;
+                }
                 if (this.interactionMode === 'drag_vertex' || this.interactionMode === 'select_measurement') {
                     this._onPointerMove(e);
                     e.stopImmediatePropagation();
@@ -233,6 +242,9 @@ class DraggableMeasurementExtension {
 
             // 1. Mouse down -> Decide mode FIRST
             if (['pointerdown', 'mousedown', 'touchstart'].includes(e.type)) {
+                if (this.isTouchDevice && e.type !== 'pointerdown' && e.type !== 'touchstart') {
+                    return false;
+                }
                 const clientX = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
                 const clientY = (e.touches && e.touches[0]) ? e.touches[0].clientY : e.clientY;
                 
@@ -244,7 +256,7 @@ class DraggableMeasurementExtension {
                     // Priority 2: Measurement Body Hit
                     const lineHit = this._lineHitTest(clientX, clientY);
                     if (lineHit) {
-                        this.interactionMode = 'select_measurement';
+                        this.interactionMode = this.isTouchDevice ? 'pan' : 'select_measurement';
                     } else {
                         // Priority 3: Empty space -> Pan camera
                         this.interactionMode = 'pan';

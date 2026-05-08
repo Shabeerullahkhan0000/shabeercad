@@ -26,14 +26,21 @@
         #viewer-container {
             position: fixed;
             inset: 0;
+            width: 100vw;
+            height: 100dvh;
             background: #1e293b;
             z-index: 100;
             display: none;
+            overflow: hidden;
         }
         #myCanvas {
             width: 100%;
             height: 100%;
             overflow: hidden;
+            touch-action: none;
+            overscroll-behavior: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
         .viewer-toolbar {
             position: absolute;
@@ -99,6 +106,94 @@
         .toolbar-btn:hover .toolbar-tooltip {
             opacity: 1;
             transform: translateX(0);
+        }
+        @media (max-width: 640px) {
+            #viewer-header {
+                top: max(0.75rem, env(safe-area-inset-top));
+                left: 0.75rem;
+                right: 0.75rem;
+                gap: 0.5rem;
+            }
+            #currentFileName {
+                max-width: 42vw;
+            }
+            .viewer-toolbar {
+                left: 50%;
+                right: auto;
+                top: auto;
+                bottom: max(0.85rem, env(safe-area-inset-bottom));
+                transform: translateX(-50%) translateY(1rem);
+                flex-direction: row;
+                gap: 0.5rem;
+                padding: 0.45rem;
+                border-radius: 1rem;
+                background: rgba(15, 23, 42, 0.72);
+                backdrop-filter: blur(16px);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+            }
+            .viewer-toolbar.visible {
+                transform: translateX(-50%) translateY(0);
+            }
+            .toolbar-btn {
+                width: 44px;
+                height: 44px;
+                border-radius: 0.85rem;
+                background: rgba(15, 23, 42, 0.82);
+            }
+            .toolbar-btn:hover {
+                transform: none;
+            }
+            .toolbar-tooltip,
+            .viewer-toolbar > .w-8 {
+                display: none;
+            }
+            .dimension-line-container {
+                width: 92%;
+                max-width: 360px;
+            }
+            .measurement-label-container {
+                padding: 0.45rem 0.85rem;
+                top: -36px;
+            }
+        }
+        @media (hover: none), (pointer: coarse) {
+            html,
+            body,
+            #viewer-container,
+            #myCanvas {
+                overscroll-behavior: none;
+            }
+            .toolbar-btn,
+            #drop-zone,
+            #main-logo,
+            #viewer-header button,
+            .group img {
+                transition-duration: 120ms !important;
+            }
+            .toolbar-btn:hover,
+            #drop-zone:hover,
+            .group:hover img {
+                transform: none !important;
+            }
+            .loading-status-pill {
+                animation: none;
+            }
+            .measurement-label-container {
+                animation: none;
+            }
+            .expanding-line {
+                animation: none;
+            }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                scroll-behavior: auto !important;
+                transition-duration: 0.01ms !important;
+            }
         }
         /* Custom Loading Overlay */
         #loading-overlay {
@@ -404,7 +499,7 @@
     <input type="file" id="hero-file-input" class="absolute pointer-events-none opacity-0 w-1 h-1" accept=".dwg,.dxf,.pdf,.png,.jpg,.jpeg,.bmp,.gif,application/pdf,application/acad,image/vnd.dwg,image/vnd.dxf,image/png,image/jpeg,image/gif">
     <!-- Fixed Logo -->
     <div id="logo-wrapper" class="fixed top-0 left-0 z-50 flex flex-col items-start pointer-events-none transition-all duration-300 ease-in-out">
-        <img id="main-logo" src="images/final-3-removed-bg.png" alt="ShabeerCAD" class="h-32 w-40 sm:h-48 sm:w-64 object-contain pointer-events-auto transition-all duration-300 ease-in-out p-1 sm:p-2 sm:pl-3 sm:pt-3">
+        <img id="main-logo" src="images/final-3-removed-bg.png" alt="ShabeerCAD" class="h-20 w-28 sm:h-48 sm:w-64 object-contain pointer-events-auto transition-all duration-300 ease-in-out p-1 sm:p-2 sm:pl-3 sm:pt-3">
     </div>
 
     <!-- Top Right Action -->
@@ -429,7 +524,7 @@
                     if (window.scrollY > 50 && !isShrunk) {
                         isShrunk = true;
                         // Shrink when scrolled
-                        logo.classList.remove('h-32', 'sm:h-48', 'w-40', 'sm:w-64', 'sm:pl-3', 'sm:pt-3');
+                        logo.classList.remove('h-20', 'sm:h-48', 'w-28', 'sm:w-64', 'sm:pl-3', 'sm:pt-3');
                         logo.classList.add('h-14', 'w-14', 'sm:h-16', 'sm:w-16');
                         
                         // Add blur and background to wrapper, transform to round circle
@@ -437,7 +532,7 @@
                     } else if (window.scrollY <= 50 && isShrunk) {
                         isShrunk = false;
                         // Return to original huge size
-                        logo.classList.add('h-32', 'sm:h-48', 'w-40', 'sm:w-64', 'sm:pl-3', 'sm:pt-3');
+                        logo.classList.add('h-20', 'sm:h-48', 'w-28', 'sm:w-64', 'sm:pl-3', 'sm:pt-3');
                         logo.classList.remove('h-14', 'w-14', 'sm:h-16', 'sm:w-16');
                         
                         // Remove blur and background from wrapper
@@ -450,20 +545,20 @@
         });
     </script>
 
-    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 sm:py-32 w-full pt-32 sm:pt-40">
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-32 w-full pt-24 sm:pt-40">
         
         <!-- Hero / Upload Section -->
-        <section class="mb-32 text-center flex flex-col items-center">
+        <section class="mb-16 sm:mb-32 text-center flex flex-col items-center">
                             
-            <div class="max-w-4xl mb-16 px-4">
-                <h2 class="text-[2.75rem] sm:text-9xl font-[1000] text-slate-900 mb-8 tracking-[-0.05em] leading-[0.9] text-center mt-12">
+            <div class="max-w-4xl mb-10 sm:mb-16 px-1 sm:px-4">
+                <h2 class="text-4xl sm:text-9xl font-[1000] text-slate-900 mb-6 sm:mb-8 tracking-normal leading-[0.95] text-center mt-8 sm:mt-12">
                     Open any <span class="text-blue-600">Drawing.</span><br/>
-                    <span class="text-slate-400/50 block mt-2 sm:mt-4 text-3xl sm:text-7xl tracking-[-0.03em]">No software. No problem.</span>
+                    <span class="text-slate-400/50 block mt-2 sm:mt-4 text-2xl sm:text-7xl tracking-normal">No software. No problem.</span>
                 </h2>
                 <p class="hidden sm:block text-xl text-slate-500 font-medium leading-relaxed max-w-xl mx-auto mb-10">
                     The professional standard for web-based CAD viewing. <br/>Fast, private, and zero installation required.
                 </p>
-                <div class="flex items-center justify-center gap-6 sm:gap-12 mt-4 sm:mt-12">
+                <div class="flex items-center justify-center gap-4 sm:gap-12 mt-4 sm:mt-12">
                     <div class="flex flex-col items-center">
                         <span class="text-xl sm:text-3xl font-black text-slate-900 tracking-tighter">100%</span>
                         <span class="text-[8px] sm:text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Private</span>
@@ -481,31 +576,31 @@
                 </div>
             </div>
 
-            <div class="w-full max-w-2xl relative px-4 group">
-                <div class="absolute -inset-10 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 rounded-[3rem] blur-[60px] opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
+            <div class="w-full max-w-2xl relative px-0 sm:px-4 group">
+                <div class="hidden sm:block absolute -inset-10 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 rounded-[3rem] blur-[60px] opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
                 
-                <div id="drop-zone" onclick="triggerUpload()" class="relative block p-12 sm:p-24 border border-slate-200 rounded-[3rem] bg-white group shadow-[0_30px_100px_rgba(0,0,0,0.04)] hover:shadow-[0_45px_120px_rgba(0,0,0,0.08)] transition-all duration-500 cursor-pointer overflow-hidden border-b-4 hover:border-blue-500">
+                <div id="drop-zone" onclick="triggerUpload()" class="relative block p-6 sm:p-24 border border-slate-200 rounded-3xl sm:rounded-[3rem] bg-white group shadow-[0_18px_60px_rgba(0,0,0,0.05)] sm:shadow-[0_30px_100px_rgba(0,0,0,0.04)] hover:shadow-[0_45px_120px_rgba(0,0,0,0.08)] transition-all duration-500 cursor-pointer overflow-hidden border-b-4 hover:border-blue-500">
                     <!-- Background Design Element -->
                     <div class="absolute top-0 left-0 w-full h-full opacity-[0.03] pointer-events-none bg-[radial-gradient(circle_at_20%_20%,#3b82f6_0%,transparent_30%)] group-hover:opacity-[0.06] transition-opacity"></div>
                     
-                    <div class="absolute top-0 right-0 p-10 opacity-5 group-hover:opacity-10 transition-opacity">
-                        <i data-lucide="file-digit" class="w-40 h-40 text-blue-600 rotate-6"></i>
+                    <div class="absolute top-0 right-0 p-6 sm:p-10 opacity-5 group-hover:opacity-10 transition-opacity">
+                        <i data-lucide="file-digit" class="w-28 h-28 sm:w-40 sm:h-40 text-blue-600 rotate-6"></i>
                     </div>
                     
-                    <div class="w-24 h-24 bg-slate-900 rounded-3xl flex items-center justify-center mx-auto mb-10 shadow-2xl shadow-slate-200 group-hover:scale-110 group-hover:bg-blue-600 group-hover:rotate-6 transition-all duration-500">
-                        <i data-lucide="plus" class="w-12 h-12 text-white"></i>
+                    <div class="w-16 h-16 sm:w-24 sm:h-24 bg-slate-900 rounded-2xl sm:rounded-3xl flex items-center justify-center mx-auto mb-6 sm:mb-10 shadow-2xl shadow-slate-200 group-hover:scale-110 group-hover:bg-blue-600 group-hover:rotate-6 transition-all duration-500">
+                        <i data-lucide="plus" class="w-8 h-8 sm:w-12 sm:h-12 text-white"></i>
                     </div>
 
-                    <span class="block text-3xl sm:text-4xl font-black text-slate-900 mb-4 tracking-tighter">
+                    <span class="block text-2xl sm:text-4xl font-black text-slate-900 mb-3 sm:mb-4 tracking-normal">
                         <span class="hidden sm:inline">Drop Drawing to Open</span>
                         <span class="inline sm:hidden">Select a Drawing</span>
                     </span>
                     
-                    <p class="text-slate-400 text-lg font-bold mb-12">
+                    <p class="text-slate-400 text-sm sm:text-lg font-bold mb-8 sm:mb-12">
                         <span class="hidden sm:inline">or</span> tap here to browse CAD files
                     </p>
 
-                    <div class="inline-flex items-center gap-3 px-6 py-3 bg-slate-900 rounded-full group-hover:bg-blue-600 transition-colors shadow-lg shadow-slate-200 group-hover:shadow-blue-200">
+                    <div class="inline-flex items-center gap-3 px-5 sm:px-6 py-3 bg-slate-900 rounded-full group-hover:bg-blue-600 transition-colors shadow-lg shadow-slate-200 group-hover:shadow-blue-200">
                         <i data-lucide="eye" class="w-4 h-4 text-white"></i>
                         <span class="text-xs font-black text-white uppercase tracking-[0.2em]">Open viewer</span>
                     </div>
@@ -514,7 +609,7 @@
         </section>
 
         <!-- Tabs Navigation -->
-        <div class="flex items-center gap-8 border-b border-slate-200 mb-8 overflow-x-auto no-scrollbar">
+        <div class="flex items-center gap-6 sm:gap-8 border-b border-slate-200 mb-6 sm:mb-8 overflow-x-auto no-scrollbar">
             <button onclick="switchTab('samples')" id="tab-samples" class="pb-4 px-2 text-sm font-bold border-b-2 border-blue-600 text-blue-600 whitespace-nowrap transition-all">
                 Sample Drawings
             </button>
@@ -524,12 +619,12 @@
         </div>
 
         <!-- Sample Drawings Grid -->
-        <section id="section-samples" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <section id="section-samples" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             <!-- Cards will be populated by JS -->
         </section>
 
         <!-- Recent Drawings Grid -->
-        <section id="section-recent" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 text-center py-20">
+        <section id="section-recent" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 text-center py-12 sm:py-20">
             <div id="empty-recent" class="col-span-full">
                 <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <i data-lucide="history" class="w-8 h-8 text-slate-400"></i>
@@ -569,6 +664,10 @@
             viewerObjectUrls.forEach(url => URL.revokeObjectURL(url));
             viewerObjectUrls.clear();
         }
+
+        const isTouchDevice = () => ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches;
+        const isMobileViewport = () => window.matchMedia('(max-width: 640px)').matches;
+        const shouldUseFastMobileRender = () => isTouchDevice() || isMobileViewport();
         
         window.MeasurementType = MeasurementType;
         window.ToolbarMenuId = ToolbarMenuId;
@@ -606,11 +705,13 @@ viewerPromise = (async () => {
                 window.measurementPlugin = new MeasurementPlugin(viewer, { language });
                 
                 // Initialize Professional Draggable Measurement Extension
-                if (window.DraggableMeasurementExtension) {
+                if (window.DraggableMeasurementExtension && !shouldUseFastMobileRender()) {
                     if (window.draggableExtension && typeof window.draggableExtension.destroy === 'function') {
                         window.draggableExtension.destroy();
                     }
                     window.draggableExtension = new DraggableMeasurementExtension(viewer, window.measurementPlugin);
+                } else if (shouldUseFastMobileRender()) {
+                    window.draggableExtension = null;
                 }
                 
                 // Custom elegant HUD updating logic
@@ -753,8 +854,9 @@ viewerPromise = (async () => {
                     }
                 };
 
-                // Setup listeners after a small delay to ensure plugin initialization
-                setTimeout(setupMeasurementListeners, 1500);
+                // Setup listeners after a small delay to ensure plugin initialization.
+                // Mobile gets a longer delay so first drawing render stays responsive.
+                setTimeout(setupMeasurementListeners, shouldUseFastMobileRender() ? 2600 : 1500);
 
                 // Viewer event as fallback/completion sync
                 viewer.addEventListener(ViewerEvent.MeasurementAdd, (event) => {
@@ -791,6 +893,7 @@ viewerPromise = (async () => {
         window.openViewerWithFile = async (file) => {
             if (!file) return;
             revokeViewerObjectUrls();
+            const fastMobileRender = shouldUseFastMobileRender();
             
             const btnDistance = document.getElementById("btn-distance");
             const btnArea = document.getElementById("btn-area");
@@ -819,13 +922,15 @@ viewerPromise = (async () => {
             
             container.style.display = "block";
             document.body.style.overflow = "hidden";
-            lucide.createIcons();
+            if (!fastMobileRender) lucide.createIcons();
             
             // Show custom loading overlay
             overlay.classList.remove("opacity-0", "pointer-events-none");
             overlay.classList.add("opacity-100", "pointer-events-auto");
-            loadingCard.classList.remove("scale-90");
-            loadingCard.classList.add("scale-100");
+            if (!fastMobileRender) {
+                loadingCard.classList.remove("scale-90");
+                loadingCard.classList.add("scale-100");
+            }
             
             const measurementEl = document.getElementById("loading-measurement");
             const loadingLine = document.getElementById("loading-line-progress");
@@ -858,8 +963,10 @@ viewerPromise = (async () => {
             // Show custom loading overlay
             overlay.classList.remove("opacity-0", "pointer-events-none");
             overlay.classList.add("opacity-100", "pointer-events-auto");
-            loadingCard.classList.remove("scale-90");
-            loadingCard.classList.add("scale-100");
+            if (!fastMobileRender) {
+                loadingCard.classList.remove("scale-90");
+                loadingCard.classList.add("scale-100");
+            }
             
             // Re-enable transitions for animation
             setTimeout(() => {
@@ -869,13 +976,17 @@ viewerPromise = (async () => {
                     measurementBox.style.transition = 'left 0.1s linear, opacity 0.3s ease';
                     measurementBox.classList.remove("opacity-0");
                 }
-            }, 10);
+            }, fastMobileRender ? 0 : 10);
 
             let progress = 1.05;
             let isTaskDone = false;
+            let lastProgressPaint = 0;
             
             const updateUI = (p) => {
-                if (measurementEl && isFinite(p)) measurementEl.textContent = p.toFixed(2);
+                const now = performance.now();
+                if (fastMobileRender && now - lastProgressPaint < 120 && p < 100) return;
+                lastProgressPaint = now;
+                if (measurementEl && isFinite(p)) measurementEl.textContent = fastMobileRender ? Math.round(p).toString() : p.toFixed(2);
                 
                 const container = document.querySelector('.dimension-line-container');
                 if (!container || !isFinite(p)) return;
@@ -928,8 +1039,8 @@ viewerPromise = (async () => {
                         if (toolbar) {
                             setTimeout(() => {
                                 toolbar.classList.add("visible");
-                                lucide.createIcons();
-                            }, 600);
+                                if (!fastMobileRender) lucide.createIcons();
+                            }, fastMobileRender ? 80 : 600);
                         }
                         
                         // Final hide
@@ -938,11 +1049,11 @@ viewerPromise = (async () => {
                             overlay.classList.add("opacity-0", "pointer-events-none");
                             loadingCard.classList.remove("scale-100");
                             loadingCard.classList.add("scale-90");
-                        }, 500);
+                        }, fastMobileRender ? 120 : 500);
                     }
                 }
                 updateUI(progress);
-            }, 50);
+            }, fastMobileRender ? 90 : 50);
             window.__loadingInterval = progressInterval;
 
             fileNameDisplay.textContent = "Initializing...";
@@ -970,7 +1081,9 @@ viewerPromise = (async () => {
 // Allow browser a frame to apply display: block to viewer-container 
                     // and calculate #myCanvas size to avoid RangeError
                     await new Promise(resolve => requestAnimationFrame(resolve));
-                    await new Promise(resolve => setTimeout(resolve, 50));
+                    if (!fastMobileRender) {
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    }
                     
 // DEFENSIVE: Verify #myCanvas has valid dimensions before viewer operations
                     if (canvasContainer) {
@@ -987,6 +1100,26 @@ viewerPromise = (async () => {
                     
                     // Ensure viewer is ready
                     const v = await initViewer();
+                    if (fastMobileRender && v) {
+                        try {
+                            const cm = typeof v.getCameraManager === 'function' ? v.getCameraManager() : null;
+                            const controls = cm && (cm.cameraControls || cm.controls || cm._controls);
+                            if (controls) {
+                                controls.enabled = true;
+                                if ('enablePan' in controls) controls.enablePan = true;
+                                if ('enableZoom' in controls) controls.enableZoom = true;
+                                if ('enableDamping' in controls) controls.enableDamping = true;
+                                if ('dampingFactor' in controls) controls.dampingFactor = 0.12;
+                                if ('touchDampingFactor' in controls) controls.touchDampingFactor = 0.12;
+                                if ('zoomSpeed' in controls) controls.zoomSpeed = Math.min(controls.zoomSpeed || 1, 0.9);
+                                if ('panSpeed' in controls) controls.panSpeed = Math.min(controls.panSpeed || 1, 0.9);
+                            }
+                            if (typeof v.resize === 'function') v.resize();
+                            else if (typeof v.updateSize === 'function') v.updateSize();
+                        } catch (navErr) {
+                            console.warn("Mobile navigation tuning skipped:", navErr);
+                        }
+                    }
                     if (loadingStatusPill) loadingStatusPill.textContent = "Rendering";
                     fileNameDisplay.textContent = "Loading " + file.name + "...";
                     
@@ -1029,7 +1162,7 @@ viewerPromise = (async () => {
                                 } catch(err) {
                                     console.warn("Default measurement activation deferred:", err);
                                 }
-                            }, 800);
+                            }, fastMobileRender ? 1600 : 800);
                         }
                     } catch (err) {
                         console.error("Error loading model:", err);
@@ -1282,15 +1415,15 @@ viewerPromise = (async () => {
 
         function createCard(project) {
             return `
-                <div onclick="openSample('${project.id}')" onmouseenter="prefetchSample('${project.id}')" class="cursor-pointer group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-slate-200 flex flex-col h-full">
-                    <div class="aspect-video relative overflow-hidden bg-slate-100/50 p-4 border-b border-slate-100 flex items-center justify-center">
+                <div onclick="openSample('${project.id}')" onmouseenter="prefetchSample('${project.id}')" class="cursor-pointer group bg-white rounded-xl sm:rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all border border-slate-200 flex flex-col h-full">
+                    <div class="aspect-video relative overflow-hidden bg-slate-100/50 p-3 sm:p-4 border-b border-slate-100 flex items-center justify-center">
                         <img src="${project.thumbnail}" alt="${project.name}" 
                              onerror="this.onerror=null; this.src='images/default-thumbnail.jpg'; this.classList.add('opacity-40');"
                              class="w-full h-full object-contain drop-shadow-md group-hover:scale-105 transition-transform duration-500">
                     </div>
-                    <div class="p-4 flex items-center justify-between bg-white">
-                        <div class="flex flex-col">
-                            <span class="text-sm font-bold text-slate-800 tracking-tight">${project.name}</span>
+                    <div class="p-3 sm:p-4 flex items-center justify-between gap-3 bg-white">
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-sm font-bold text-slate-800 tracking-normal truncate">${project.name}</span>
                         </div>
                         <div class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-blue-600 transition-colors shrink-0">
                             <i data-lucide="arrow-up-right" class="w-4 h-4 text-blue-500 group-hover:text-white"></i>

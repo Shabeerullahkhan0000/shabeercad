@@ -443,6 +443,11 @@
         }
     </style>
     <script>
+        window.triggerUpload = window.triggerUpload || function() {
+            const input = document.getElementById('hero-file-input');
+            if (input) input.click();
+        };
+
         // Auto-detect environment and set import map for x-viewer packages
         (function() {
             const isDevEnv = false;
@@ -753,10 +758,12 @@
         } from "@x-viewer/plugins";
         // Import our extension
         import "./draggable-measurement-extension.js";
+        import "./mobile-distance-tool.js";
 
         let viewer = null;
         let modelUploader = null;
         let viewerPromise = null;
+        let mobileDistanceTool = null;
         const language = "en";
         const viewerObjectUrls = new Set();
 
@@ -774,6 +781,7 @@
         const isTouchDevice = () => ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches;
         const isMobileViewport = () => window.matchMedia('(max-width: 640px)').matches;
         const shouldUseFastMobileRender = () => isTouchDevice() || isMobileViewport();
+        const shouldUseCustomMobileDistance = () => isTouchDevice() && isMobileViewport();
         
         window.MeasurementType = MeasurementType;
         window.ToolbarMenuId = ToolbarMenuId;
@@ -815,6 +823,11 @@ viewerPromise = (async () => {
                         window.draggableExtension.destroy();
                     }
                     window.draggableExtension = new DraggableMeasurementExtension(viewer, window.measurementPlugin);
+                }
+
+                if (shouldUseCustomMobileDistance() && window.MobileDistanceOverlay && !mobileDistanceTool) {
+                    mobileDistanceTool = new MobileDistanceOverlay(viewer);
+                    window.mobileDistanceTool = mobileDistanceTool;
                 }
                 
                 // Custom elegant HUD updating logic
@@ -1371,6 +1384,10 @@ viewerPromise = (async () => {
                     if (typeof viewer.clearModel === 'function') viewer.clearModel();
                 } catch(e) {}
             }
+            if (window.mobileDistanceTool) {
+                window.mobileDistanceTool.deactivate();
+                window.mobileDistanceTool.clear();
+            }
         };
 
         // File Input setup
@@ -1411,6 +1428,17 @@ viewerPromise = (async () => {
                     }
                     break;
                 case 'distance':
+                    if (shouldUseCustomMobileDistance() && window.mobileDistanceTool) {
+                        const btn = document.getElementById("btn-distance");
+                        const areaBtn = document.getElementById("btn-area");
+                        const active = window.mobileDistanceTool.toggle();
+                        if (btn) btn.classList.toggle("active", active);
+                        if (areaBtn) areaBtn.classList.remove("active");
+                        if (window.measurementPlugin && typeof window.measurementPlugin.deactivate === 'function') {
+                            try { window.measurementPlugin.deactivate(); } catch (e) {}
+                        }
+                        return;
+                    }
                     if (window.measurementPlugin) {
                         const btn = document.getElementById("btn-distance");
                         const areaBtn = document.getElementById("btn-area");
@@ -1444,6 +1472,11 @@ viewerPromise = (async () => {
                     }
                     break;
                 case 'area':
+                    if (shouldUseCustomMobileDistance() && window.mobileDistanceTool) {
+                        window.mobileDistanceTool.deactivate();
+                        const distanceBtn = document.getElementById("btn-distance");
+                        if (distanceBtn) distanceBtn.classList.remove("active");
+                    }
                     if (window.measurementPlugin) {
                         const btn = document.getElementById("btn-area");
                         const distBtn = document.getElementById("btn-distance");

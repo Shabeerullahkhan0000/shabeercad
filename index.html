@@ -45,6 +45,17 @@
             overscroll-behavior: none;
             -webkit-user-select: none;
             user-select: none;
+            -webkit-touch-callout: none;
+        }
+        html.mobile-touch-managed,
+        body.mobile-touch-managed,
+        body.mobile-touch-managed #viewer-container,
+        body.mobile-touch-managed #myCanvas {
+            touch-action: none;
+            overscroll-behavior: none;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
         }
         .viewer-toolbar {
             position: absolute;
@@ -758,12 +769,12 @@
         } from "@x-viewer/plugins";
         // Import our extension
         import "./draggable-measurement-extension.js";
-        import "./mobile-distance-tool.js";
+        import "./mobile-touch-interaction-manager.js";
 
         let viewer = null;
         let modelUploader = null;
         let viewerPromise = null;
-        let mobileDistanceTool = null;
+        let mobileTouchManager = null;
         const language = "en";
         const viewerObjectUrls = new Set();
 
@@ -787,13 +798,13 @@
             window.matchMedia('(any-pointer: coarse)').matches ||
             window.matchMedia('(max-width: 900px)').matches;
 
-        function getMobileDistanceTool() {
-            if (!viewer || !window.MobileDistanceOverlay) return null;
-            if (!mobileDistanceTool) {
-                mobileDistanceTool = new MobileDistanceOverlay(viewer);
-                window.mobileDistanceTool = mobileDistanceTool;
+        function getMobileTouchManager() {
+            if (!viewer || !window.TouchInteractionManager) return null;
+            if (!mobileTouchManager) {
+                mobileTouchManager = new TouchInteractionManager(viewer);
+                window.mobileTouchManager = mobileTouchManager;
             }
-            return mobileDistanceTool;
+            return mobileTouchManager;
         }
 
         function stopSdkDistanceMeasurement() {
@@ -839,15 +850,18 @@ viewerPromise = (async () => {
                     let toastTimeout;
                 window.measurementPlugin = new MeasurementPlugin(viewer, { language });
                 
-                // Initialize Professional Draggable Measurement Extension
-                if (window.DraggableMeasurementExtension) {
+                // Desktop uses x-viewer measurement editing. Mobile owns touch through TouchInteractionManager.
+                if (!shouldUseCustomMobileDistance() && window.DraggableMeasurementExtension) {
                     if (window.draggableExtension && typeof window.draggableExtension.destroy === 'function') {
                         window.draggableExtension.destroy();
                     }
                     window.draggableExtension = new DraggableMeasurementExtension(viewer, window.measurementPlugin);
+                } else if (window.draggableExtension && typeof window.draggableExtension.destroy === 'function') {
+                    window.draggableExtension.destroy();
+                    window.draggableExtension = null;
                 }
 
-                if (shouldUseCustomMobileDistance()) getMobileDistanceTool();
+                if (shouldUseCustomMobileDistance()) getMobileTouchManager();
                 
                 // Custom elegant HUD updating logic
                 window._hudManuallyClosed = false;
@@ -1277,25 +1291,26 @@ viewerPromise = (async () => {
                     const v = await initViewer();
                     if (fastMobileRender && v) {
                         try {
-                            const cm = typeof v.getCameraManager === 'function' ? v.getCameraManager() : null;
-                            const controls = cm && (cm.cameraControls || cm.controls || cm._controls);
-                            if (controls) {
-                                controls.enabled = true;
-                                if ('enablePan' in controls) controls.enablePan = true;
-                                if ('enableZoom' in controls) controls.enableZoom = true;
-                                if ('enableDamping' in controls) controls.enableDamping = false;
-                                if ('dampingFactor' in controls) controls.dampingFactor = 0.04;
-                                if ('touchDampingFactor' in controls) controls.touchDampingFactor = 0.04;
-                                if ('zoomSpeed' in controls) controls.zoomSpeed = Math.max(controls.zoomSpeed || 1, 1.15);
-                                if ('panSpeed' in controls) controls.panSpeed = Math.max(controls.panSpeed || 1, 1.18);
-                                if ('screenSpacePanning' in controls) controls.screenSpacePanning = true;
-                                if ('touches' in controls && controls.touches) {
-                                    if ('ONE' in controls.touches) controls.touches.ONE = controls.touches.ONE;
-                                    if ('TWO' in controls.touches) controls.touches.TWO = controls.touches.TWO;
+                            if (shouldUseCustomMobileDistance()) {
+                                const mobileManager = getMobileTouchManager();
+                                if (mobileManager) mobileManager.refresh();
+                            } else {
+                                const cm = typeof v.getCameraManager === 'function' ? v.getCameraManager() : null;
+                                const controls = cm && (cm.cameraControls || cm.controls || cm._controls);
+                                if (controls) {
+                                    controls.enabled = true;
+                                    if ('enablePan' in controls) controls.enablePan = true;
+                                    if ('enableZoom' in controls) controls.enableZoom = true;
+                                    if ('enableDamping' in controls) controls.enableDamping = false;
+                                    if ('dampingFactor' in controls) controls.dampingFactor = 0.04;
+                                    if ('touchDampingFactor' in controls) controls.touchDampingFactor = 0.04;
+                                    if ('zoomSpeed' in controls) controls.zoomSpeed = Math.max(controls.zoomSpeed || 1, 1.15);
+                                    if ('panSpeed' in controls) controls.panSpeed = Math.max(controls.panSpeed || 1, 1.18);
+                                    if ('screenSpacePanning' in controls) controls.screenSpacePanning = true;
                                 }
+                                if (typeof v.resize === 'function') v.resize();
+                                else if (typeof v.updateSize === 'function') v.updateSize();
                             }
-                            if (typeof v.resize === 'function') v.resize();
-                            else if (typeof v.updateSize === 'function') v.updateSize();
                         } catch (navErr) {
                             console.warn("Mobile navigation tuning skipped:", navErr);
                         }
@@ -1403,9 +1418,8 @@ viewerPromise = (async () => {
                     if (typeof viewer.clearModel === 'function') viewer.clearModel();
                 } catch(e) {}
             }
-            if (window.mobileDistanceTool) {
-                window.mobileDistanceTool.deactivate();
-                window.mobileDistanceTool.clear();
+            if (window.mobileTouchManager) {
+                window.mobileTouchManager.reset();
             }
         };
 
@@ -1450,9 +1464,9 @@ viewerPromise = (async () => {
                     if (shouldUseCustomMobileDistance()) {
                         const btn = document.getElementById("btn-distance");
                         const areaBtn = document.getElementById("btn-area");
-                        const tool = getMobileDistanceTool();
+                        const manager = getMobileTouchManager();
                         stopSdkDistanceMeasurement();
-                        const active = tool ? tool.toggle() : false;
+                        const active = manager ? manager.toggleDistanceMode() : false;
                         if (btn) btn.classList.toggle("active", active);
                         if (areaBtn) areaBtn.classList.remove("active");
                         return;
@@ -1490,8 +1504,8 @@ viewerPromise = (async () => {
                     }
                     break;
                 case 'area':
-                    if (shouldUseCustomMobileDistance() && window.mobileDistanceTool) {
-                        window.mobileDistanceTool.deactivate();
+                    if (shouldUseCustomMobileDistance() && window.mobileTouchManager) {
+                        window.mobileTouchManager.deactivateDistanceMode();
                         const distanceBtn = document.getElementById("btn-distance");
                         if (distanceBtn) distanceBtn.classList.remove("active");
                     }

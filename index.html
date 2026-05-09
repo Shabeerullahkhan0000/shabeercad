@@ -781,7 +781,29 @@
         const isTouchDevice = () => ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches;
         const isMobileViewport = () => window.matchMedia('(max-width: 640px)').matches;
         const shouldUseFastMobileRender = () => isTouchDevice() || isMobileViewport();
-        const shouldUseCustomMobileDistance = () => isTouchDevice() && isMobileViewport();
+        const shouldUseCustomMobileDistance = () =>
+            isTouchDevice() ||
+            isMobileViewport() ||
+            window.matchMedia('(any-pointer: coarse)').matches ||
+            window.matchMedia('(max-width: 900px)').matches;
+
+        function getMobileDistanceTool() {
+            if (!viewer || !window.MobileDistanceOverlay) return null;
+            if (!mobileDistanceTool) {
+                mobileDistanceTool = new MobileDistanceOverlay(viewer);
+                window.mobileDistanceTool = mobileDistanceTool;
+            }
+            return mobileDistanceTool;
+        }
+
+        function stopSdkDistanceMeasurement() {
+            if (window.measurementPlugin && typeof window.measurementPlugin.deactivate === 'function') {
+                try { window.measurementPlugin.deactivate(); } catch (e) {}
+            }
+            if (window.draggableExtension && typeof window.draggableExtension.deactivate === 'function') {
+                try { window.draggableExtension.deactivate(); } catch (e) {}
+            }
+        }
         
         window.MeasurementType = MeasurementType;
         window.ToolbarMenuId = ToolbarMenuId;
@@ -825,10 +847,7 @@ viewerPromise = (async () => {
                     window.draggableExtension = new DraggableMeasurementExtension(viewer, window.measurementPlugin);
                 }
 
-                if (shouldUseCustomMobileDistance() && window.MobileDistanceOverlay && !mobileDistanceTool) {
-                    mobileDistanceTool = new MobileDistanceOverlay(viewer);
-                    window.mobileDistanceTool = mobileDistanceTool;
-                }
+                if (shouldUseCustomMobileDistance()) getMobileDistanceTool();
                 
                 // Custom elegant HUD updating logic
                 window._hudManuallyClosed = false;
@@ -1428,15 +1447,14 @@ viewerPromise = (async () => {
                     }
                     break;
                 case 'distance':
-                    if (shouldUseCustomMobileDistance() && window.mobileDistanceTool) {
+                    if (shouldUseCustomMobileDistance()) {
                         const btn = document.getElementById("btn-distance");
                         const areaBtn = document.getElementById("btn-area");
-                        const active = window.mobileDistanceTool.toggle();
+                        const tool = getMobileDistanceTool();
+                        stopSdkDistanceMeasurement();
+                        const active = tool ? tool.toggle() : false;
                         if (btn) btn.classList.toggle("active", active);
                         if (areaBtn) areaBtn.classList.remove("active");
-                        if (window.measurementPlugin && typeof window.measurementPlugin.deactivate === 'function') {
-                            try { window.measurementPlugin.deactivate(); } catch (e) {}
-                        }
                         return;
                     }
                     if (window.measurementPlugin) {
